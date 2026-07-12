@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint
+from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
 
@@ -9,7 +9,6 @@ def detect_language(file_path, content=""):
     if not file_path:
         return None
     
-    # Detection by extension
     ext_map = {
         ".py": "python",
         ".sh": "bash",
@@ -38,7 +37,6 @@ def detect_language(file_path, content=""):
     _, ext = os.path.splitext(file_path)
     lang = ext_map.get(ext.lower())
     
-    # Detection by shebang if extension is ambiguous or missing
     if not lang and content.startswith("#!"):
         first_line = content.splitlines()[0] if content else ""
         if "python" in first_line:
@@ -47,6 +45,231 @@ def detect_language(file_path, content=""):
             return "bash"
             
     return lang
+
+class CodeFoldingArea(QWidget):
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def sizeHint(self):
+        return QSize(20, 0)
+
+    def mousePressEvent(self, event):
+        cursor = self.editor.cursorForPosition(event.position().toPoint())
+        block = cursor.block()
+        if block.isValid():
+            self.editor.toggle_fold(block.blockNumber())
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(event.rect(), self.palette().window())
+        
+        block = self.editor.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = round(self.editor.blockBoundingGeometry(block).translated(0, -self.editor.verticalScrollBar().value()).top())
+        bottom = top + round(self.editor.blockBoundingRect(block).height())
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible():
+                fold_end = self.editor.foldable_blocks.get(block_number)
+                if fold_end is not None:
+                    is_folded = block_number in self.editor.folded_blocks
+                    painter.setPen(self.palette().color(self.palette().ColorRole.Text))
+                    if is_folded:
+                        # Triangle pointing right (folded)
+                        painter.drawPolygon([QPoint(5, top + 4), QPoint(5, top + 12), QPoint(12, top + 8)])
+                    else:
+                        # Triangle pointing down (unfolded)
+                        painter.drawPolygon([QPoint(5, top + 6), QPoint(12, top + 6), QPoint(8, top + 12)])
+
+            block = block.next()
+            top = bottom
+            bottom = top + round(self.editor.blockBoundingRect(block).height())
+            block_number += 1
+
+class LineNumberArea(QWidget):
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def sizeHint(self):
+        return QSize(self.editor.line_number_width(), 0)
+
+    def paintEvent(self, event):
+        self.editor.lineNumberAreaPaintEvent(event)
+
+class CustomEditor(QPlainTextEdit):
+    def __init__(self):
+        super().__init__()
+        self.lineNumberArea = LineNumberArea(self)
+        self.foldingArea = CodeFoldingArea(self)
+        self.foldable_blocks = {} # start_block: end_block
+        self.folded_blocks = set() # set of start_blocks
+        
+        self.textChanged.connect(self.update_foldable_blocks)
+        self.update_sidebar_width()
+        self.update_foldable_blocks()
+
+    def line_number_width(self):
+        digits = 1
+        max_value = max(1, self.blockCount())
+        while max_value >= 10:
+            max_value /= 10
+            digits += 1
+        
+        font = self.font()
+        metrics = QFontMetrics(font)
+        space = 3 # pixels for padding
+        
+        return metrics.horizontalAdvance('9') * digits + space
+
+    def folding_area_width(self):
+        return 20 if self.foldable_blocks else 0
+
+    def update_sidebar_width(self):
+        width = self.line_number_width() + self.folding_area_width()
+        self.setViewportMargins(width, 0, 0, 0)
+
+    def update_sidebar_area(self):
+        ln_width = self.line_number_width()
+        fold_width = self.folding_area_width()
+        
+        self.lineNumberArea.setGeometry(QRect(0, 0, ln_width, self.height()))
+        self.foldingArea.setGeometry(QRect(ln_width, 0, fold_width, self.height()))
+
+    def update_foldable_blocks(self):
+        self.foldable_blocks = {}
+        self.folded_blocks = set()
+        
+        # Scan for foldable blocks (e.g. Python)
+        block = self.document().begin()
+        while block.isValid():
+            text = block.text()
+            # Simple regex-like check for Python blocks
+            if any(text.strip().startswith(k) and text.strip().endswith(':') for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try:', 'except ', 'with ']):
+                start_block = block.blockNumber()
+                # Find end of block by looking at indentation
+                start_indent = len(text) - len(text.lstrip())
+                
+                next_block = block.next()
+                last_block = start_block
+                while next_block.isValid():
+                    next_text = next_block.text()
+                    if next_text.strip():
+                        next_indent = len(next_text) - len(next_text.lstrip())
+                        if next_indent <= start_indent:
+                            break
+                    last_block = next_block.blockNumber()
+                    next_block = next_block.next()
+                
+                if last_block > start_block:
+                    self.foldable_blocks[start_block] = last_block
+            
+            block = block.next()
+        
+        self.update_sidebar_width()
+        self.update_sidebar_area()
+
+    def toggle_fold(self, block_number):
+        if block_number in self.foldable_blocks:
+            if block_number in self.folded_blocks:
+                # Unfold
+                self.folded_blocks.remove(block_number)
+                start = block_number + 1
+                end = self.foldable_blocks[block_number]
+                for i in range(start, end + 1):
+                    block = self.document().findBlockByNumber(i)
+                    if block.isValid():
+                        block.setVisible(True)
+            else:
+                # Fold
+                self.folded_blocks.add(block_number)
+                start = block_number + 1
+                end = self.foldable_blocks[block_number]
+                for i in range(start, end + 1):
+                    block = self.document().findBlockByNumber(i)
+                    if block.isValid():
+                        block.setVisible(False)
+            
+            self.update_sidebar_area() # Refresh triangles
+            self.viewport().update()
+
+    def keyPressEvent(self, event):
+        # Auto-closure map
+        pairs = {
+            '(': ')',
+            '[': ']',
+            '{': '}',
+            '"': '"',
+            "'": "'"
+        }
+        
+        key = event.text()
+        if key in pairs:
+            # Insert opening and closing bracket
+            self.insertPlainText(key)
+            self.insertPlainText(pairs[key])
+            # Move cursor back one position
+            cursor = self.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Left)
+            self.setTextCursor(cursor)
+            return
+
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # Auto-indentation
+            cursor = self.textCursor()
+            line = cursor.block().text()
+            
+            # Find indentation of current line
+            indent = ""
+            for char in line:
+                if char == ' ' or char == '\t':
+                    indent += char
+                else:
+                    break
+            
+            # Extra indent if line ends with colon (e.g. Python)
+            if line.strip().endswith(':'):
+                indent += "    "
+            
+            # Insert newline and indentation
+            self.insertPlainText('\n' + indent)
+            return
+
+        super().keyPressEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_sidebar_area()
+
+    def updateRequest(self, rect, dy):
+        super().updateRequest(rect, dy)
+        sidebar_width = self.line_number_width() + self.folding_area_width()
+        if rect.contains(QRect(0, 0, sidebar_width, self.height())):
+            self.lineNumberArea.update()
+            self.foldingArea.update()
+
+    def lineNumberAreaPaintEvent(self, event):
+        painter = QPainter(self.lineNumberArea)
+        painter.fillRect(event.rect(), self.palette().window())
+        
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = round(self.blockBoundingGeometry(block).translated(0, -self.verticalScrollBar().value()).top())
+        bottom = top + round(self.blockBoundingRect(block).height())
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number + 1)
+                painter.setPen(self.palette().color(self.palette().ColorRole.Text))
+                painter.drawText(0, top, self.lineNumberArea.width() - 2, 
+                                 self.fontMetrics().height(),
+                                 Qt.AlignmentFlag.AlignRight, number)
+
+            block = block.next()
+            top = bottom
+            bottom = top + round(self.blockBoundingRect(block).height())
+            block_number += 1
 
 class EditorTab(QWidget):
     modified_changed = pyqtSignal(bool)
@@ -59,8 +282,10 @@ class EditorTab(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
 
-        self.editor = QPlainTextEdit()
+        self.editor = CustomEditor()
         self.editor.textChanged.connect(self.on_text_changed)
+        self.editor.blockCountChanged.connect(self.editor.update_sidebar_width)
+        self.editor.update_sidebar_width()
         self.layout.addWidget(self.editor)
 
         # Setup theme and highlighter
@@ -76,6 +301,7 @@ class EditorTab(QWidget):
         bg_color = Theme.get_color(self.current_theme, "background")
         fg_color = Theme.get_color(self.current_theme, "foreground")
         
+        # Note: CustomEditor is a QPlainTextEdit, so we apply style to it
         self.editor.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: {bg_color.name()};
@@ -90,11 +316,12 @@ class EditorTab(QWidget):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+            self.editor.blockSignals(True)
             self.editor.setPlainText(content)
+            self.editor.blockSignals(False)
             self.file_path = file_path
             self._is_modified = False
             
-            # Detect language and update highlighter
             lang = detect_language(file_path, content)
             print(f"[DEBUG] Detected language: {lang}")
             if lang:
