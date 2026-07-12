@@ -33,6 +33,52 @@ class KeybindingsDialog(QDialog):
         btn_layout.addWidget(self.cancel_btn)
         self.layout.addLayout(btn_layout)
 
+        # Apply Nord styling to the dialog
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2E3440;
+                color: #D8DEE9;
+            }
+            QLabel {
+                color: #D8DEE9;
+                font-size: 13px;
+                margin-bottom: 10px;
+            }
+            QListWidget {
+                background-color: #3B4252;
+                border: 1px solid #4C566A;
+                border-radius: 4px;
+                color: #D8DEE9;
+                font-size: 13px;
+                outline: 0;
+                padding: 4px;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-radius: 3px;
+            }
+            QListWidget::item:selected {
+                background-color: #4C566A;
+                color: #88C0D0;
+            }
+            QPushButton {
+                background-color: #434C5E;
+                color: #D8DEE9;
+                border: 1px solid #4C566A;
+                border-radius: 4px;
+                padding: 6px 15px;
+                font-size: 13px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #4C566A;
+                border-color: #88C0D0;
+            }
+            QPushButton:pressed {
+                background-color: #3B4252;
+            }
+        """)
+
         self.load_bindings_into_list()
 
     def load_bindings_into_list(self):

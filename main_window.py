@@ -1,13 +1,18 @@
 import os
 import re
+import subprocess
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QFileDialog, QMessageBox, 
-    QMenu, QMenuBar, QSplitter
+    QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QLabel,
+    QPushButton, QTabBar, QStyle
 )
-from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument
-from PyQt6.QtCore import Qt
+
+
+
+from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
 from editor_tab import EditorTab
-from search_dialog import SearchReplaceDialog
+from search_dialog import SearchPanel
 from file_tree import FileTree
 from command_palette import CommandPalette
 from config_manager import ConfigManager
@@ -21,6 +26,9 @@ class MainWindow(QMainWindow):
 
         self.config_manager = ConfigManager()
         
+        # Status icons
+        self.status_icons = self._create_file_status_icons()
+        
         # Main Splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(self.splitter)
@@ -30,23 +38,35 @@ class MainWindow(QMainWindow):
         self.file_tree.fileOpened.connect(self.open_file)
         self.splitter.addWidget(self.file_tree)
 
+        # Editor Container (Tabs + Search Panel)
+        self.editor_container = QWidget()
+        self.editor_layout = QVBoxLayout(self.editor_container)
+        self.editor_layout.setContentsMargins(0, 0, 0, 0)
+        self.editor_layout.setSpacing(0)
+
         # Tabs
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.splitter.addWidget(self.tabs)
+        self.editor_layout.addWidget(self.tabs)
+        
+        # Search Panel
+        self.search_panel = SearchPanel()
+        self.search_panel.setMaximumHeight(0)
+        self.search_panel.find_next_requested.connect(lambda t, c, r: self.handle_find(t, c, r, forward=True))
+        self.search_panel.find_prev_requested.connect(lambda t, c, r: self.handle_find(t, c, r, forward=False))
+        self.search_panel.replace_requested.connect(self.handle_replace)
+        self.search_panel.replace_all_requested.connect(self.handle_replace_all)
+        self.search_panel.close_requested.connect(self.toggle_search_panel)
+        self.editor_layout.addWidget(self.search_panel)
+
+        self.splitter.addWidget(self.editor_container)
         
         # Set initial splitter proportions
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 4)
-
-        # Search & Command Palette
-        self.search_dialog = SearchReplaceDialog(self)
-        self.search_dialog.find_requested.connect(self.handle_find)
-        self.search_dialog.replace_requested.connect(self.handle_replace)
-        self.search_dialog.replace_all_requested.connect(self.handle_replace_all)
-        self.search_dialog.hide()
-
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([250, 950])
+        
         self.commands = {
             "new_file": "New File",
             "open_file": "Open File",
@@ -63,10 +83,105 @@ class MainWindow(QMainWindow):
         self.command_palette.actionTriggered.connect(self.execute_command)
         self.command_palette.hide()
 
+        self._setup_statusbar()
         self._create_menu()
         
         # Initial tab
         self.new_file()
+
+    def _setup_statusbar(self):
+        self.statusBar().setMinimumHeight(24)
+        
+        # Left side widgets
+        self.lang_label = QLabel("Plain Text")
+        self.lang_label.setStyleSheet("color: #88C0D0;")
+        self.statusBar().addWidget(self.lang_label)
+        
+        separator = QLabel(" | ")
+        separator.setStyleSheet("color: #4C566A;")
+        self.statusBar().addWidget(separator)
+        
+        self.line_col_label = QLabel("Ln 1, Col 1")
+        self.line_col_label.setStyleSheet("color: #8892a0;")
+        self.statusBar().addWidget(self.line_col_label)
+        
+        # Right side widgets (Permanent)
+        self.git_label = QLabel("")
+        self.git_label.setStyleSheet("color: #A3BE8C;")
+        self.statusBar().addPermanentWidget(self.git_label)
+        
+        self.encoding_label = QLabel("UTF-8")
+        self.encoding_label.setStyleSheet("color: #4C566A;")
+        self.statusBar().addPermanentWidget(self.encoding_label)
+        
+        self.tabsize_label = QLabel("Spaces: 4")
+        self.tabsize_label.setStyleSheet("color: #4C566A;")
+        self.statusBar().addPermanentWidget(self.tabsize_label)
+        
+        # Connections
+        self.tabs.currentChanged.connect(self._update_statusbar)
+        
+    def _update_statusbar(self):
+        current_tab = self.tabs.currentWidget()
+        if not current_tab:
+            return
+            
+        # Update Language
+        lang = current_tab.language or "Plain Text"
+        self.lang_label.setText(lang)
+        
+        # Update Git Branch
+        self._update_git_branch(current_tab)
+        
+        # Connect cursor change signal
+        try:
+            current_tab.editor.cursorPositionChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        current_tab.editor.cursorPositionChanged.connect(self._update_cursor_pos)
+        self._update_cursor_pos()
+
+    def _update_cursor_pos(self):
+        current_tab = self.tabs.currentWidget()
+        if not current_tab:
+            return
+        cursor = current_tab.editor.textCursor()
+        self.line_col_label.setText(f"Ln {cursor.blockNumber() + 1}, Col {cursor.columnNumber() + 1}")
+
+    def _update_git_branch(self, tab):
+        path = tab.file_path if tab.file_path else os.getcwd()
+        workdir = os.path.dirname(os.path.abspath(path))
+        
+        try:
+            # Run git branch --show-current in the file's directory
+            result = subprocess.run(
+                ["git", "-C", workdir, "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            branch = result.stdout.strip()
+            if branch:
+                self.git_label.setText(f"⎇ {branch}")
+                self.git_label.show()
+            else:
+                self.git_label.hide()
+        except Exception:
+            self.git_label.hide()
+
+    def _create_file_status_icons(self):
+        icons = {}
+        for state, color in [("saved", "#A3BE8C"), ("modified", "#EBCB8B")]:
+            pixmap = QPixmap(12, 12)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setBrush(QColor(color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(2, 2, 8, 8)
+            painter.end()
+            icons[state] = QIcon(pixmap)
+        return icons
 
     def _create_menu(self):
         menubar = self.menuBar()
@@ -116,13 +231,13 @@ class MainWindow(QMainWindow):
         # Find
         find_action = QAction("&Find", self)
         find_action.setShortcut(QKeySequence(self.config_manager.get_binding("find")))
-        find_action.triggered.connect(self.show_search_dialog)
+        find_action.triggered.connect(self.toggle_search_panel)
         edit_menu.addAction(find_action)
 
         # Replace
         replace_action = QAction("&Replace", self)
         replace_action.setShortcut(QKeySequence(self.config_manager.get_binding("replace")))
-        replace_action.triggered.connect(self.show_search_dialog)
+        replace_action.triggered.connect(self.toggle_search_panel)
         edit_menu.addAction(replace_action)
 
         edit_menu.addSeparator()
@@ -156,6 +271,7 @@ class MainWindow(QMainWindow):
         index = self.tabs.addTab(tab, tab.get_title())
         self.tabs.setCurrentIndex(index)
         tab.modified_changed.connect(lambda: self.update_tab_title(index))
+        self.add_close_button(index)
 
     def open_file(self, file_path=None):
         if not file_path:
@@ -166,16 +282,35 @@ class MainWindow(QMainWindow):
             index = self.tabs.addTab(tab, tab.get_title())
             self.tabs.setCurrentIndex(index)
             tab.modified_changed.connect(lambda: self.update_tab_title(index))
+            self.add_close_button(index)
+
+    def add_close_button(self, index):
+        close_btn = QPushButton()
+        close_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton))
+        close_btn.setIconSize(QSize(12, 12))
+        close_btn.setFixedSize(16, 16)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background: #3B4252;
+            }
+        """)
+        close_btn.clicked.connect(lambda: self.close_tab(index))
+        # Use QTabBar.ButtonPosition(1) to explicitly create the 'Right' enum member
+        # This avoids the AttributeError with .Right and the TypeError with raw int
+        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
 
     def save_file(self):
-        current_tab = self.tabs.currentWidget()
-        if not current_tab:
-            return
 
-        if current_tab.file_path:
-            current_tab.save_file()
-        else:
-            self.save_file_as()
+        index = self.tabs.currentIndex()
+        if index < 0:
+            return
+        self.save_tab_by_index(index)
 
     def save_file_as(self):
         current_tab = self.tabs.currentWidget()
@@ -224,8 +359,25 @@ class MainWindow(QMainWindow):
 
     def update_tab_title(self, index):
         tab = self.tabs.widget(index)
-        if tab:
-            self.tabs.setTabText(index, tab.get_title())
+        if not tab:
+            return
+        
+        title = tab.get_title()
+        tab_bar = self.tabs.tabBar()
+        
+        if tab.is_modified():
+            # Color the entire tab text yellow to indicate modification
+            tab_bar.setTabTextColor(index, QColor("#EBCB8B"))
+            self.tabs.setTabIcon(index, self.status_icons["modified"])
+        else:
+            # Restore default colors based on selection state
+            if self.tabs.currentIndex() == index:
+                tab_bar.setTabTextColor(index, QColor("#D8DEE9"))  # fg0
+            else:
+                tab_bar.setTabTextColor(index, QColor("#8892a0"))  # fg1
+            self.tabs.setTabIcon(index, self.status_icons["saved"])
+        
+        self.tabs.setTabText(index, title)
 
     def closeEvent(self, event):
         # Basic loop to check all tabs before closing
@@ -258,8 +410,23 @@ class MainWindow(QMainWindow):
         if current_tab:
             current_tab.editor.redo()
 
-    def show_search_dialog(self):
-        self.search_dialog.show()
+    def toggle_search_panel(self):
+        if self.search_panel.maximumHeight() > 0:
+            # Animate to hidden
+            self.anim = QPropertyAnimation(self.search_panel, b"maximumHeight")
+            self.anim.setDuration(200)
+            self.anim.setStartValue(self.search_panel.maximumHeight())
+            self.anim.setEndValue(0)
+            self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self.anim.start()
+        else:
+            # Animate to visible
+            self.anim = QPropertyAnimation(self.search_panel, b"maximumHeight")
+            self.anim.setDuration(200)
+            self.anim.setStartValue(0)
+            self.anim.setEndValue(150)
+            self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self.anim.start()
 
     def show_command_palette(self):
         self.command_palette.show()
@@ -269,7 +436,7 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self._create_menu()
 
-    def handle_find(self, text, case_sensitive, is_regex):
+    def handle_find(self, text, case_sensitive, is_regex, forward=True):
         current_tab = self.tabs.currentWidget()
         if not current_tab or not text:
             return False
@@ -279,39 +446,87 @@ class MainWindow(QMainWindow):
         if case_sensitive:
             flags |= QTextDocument.FindFlag.FindCaseSensitively
 
+        # Update match count
+        content = editor.toPlainText()
+        regex_flags = 0 if case_sensitive else re.IGNORECASE
+        if is_regex:
+            matches = list(re.finditer(text, content, flags=regex_flags))
+        else:
+            # Basic count for plain text
+            import collections
+            matches = [m.start() for m in re.finditer(re.escape(text), content, flags=regex_flags)]
+        
+        total = len(matches)
+        current = 0
+        cursor_pos = editor.textCursor().position()
+        for m in matches:
+            if m.start() < cursor_pos:
+                current += 1
+        
+        self.search_panel.set_match_count(current, total)
+
         if not is_regex:
-            if editor.find(text, flags):
-                return True
-            # Wrap around
-            cursor = editor.textCursor()
-            cursor.movePosition(cursor.MoveOperation.Start)
-            editor.setTextCursor(cursor)
-            return editor.find(text, flags)
+            if forward:
+                if editor.find(text, flags):
+                    return True
+                # Wrap around
+                cursor = editor.textCursor()
+                cursor.movePosition(cursor.MoveOperation.Start)
+                editor.setTextCursor(cursor)
+                return editor.find(text, flags)
+            else:
+                # Find previous (basic implementation)
+                cursor = editor.textCursor()
+                cursor.movePosition(cursor.MoveOperation.Start)
+                editor.setTextCursor(cursor)
+                found_pos = -1
+                while editor.find(text, flags):
+                    found_pos = editor.textCursor().position()
+                if found_pos != -1:
+                    return True
+                return False
         else:
             # Regex find implementation
-            content = editor.toPlainText()
-            cursor = editor.textCursor()
-            start_pos = cursor.position()
-            
-            regex_flags = 0 if case_sensitive else re.IGNORECASE
-            match = re.search(text, content[start_pos:], flags=regex_flags)
-            
-            if match:
-                match_start = start_pos + match.start()
-                match_end = start_pos + match.end()
-                cursor.setPosition(match_start)
-                cursor.setPosition(match_end, QTextCursor.MoveMode.KeepAnchor)
-                editor.setTextCursor(cursor)
-                return True
-            else:
-                # Wrap around
-                match = re.search(text, content, flags=regex_flags)
+            if forward:
+                match = re.search(text, content[cursor_pos:], flags=regex_flags)
                 if match:
-                    cursor.setPosition(match.start())
-                    cursor.setPosition(match.end(), QTextCursor.MoveMode.KeepAnchor)
+                    match_start = cursor_pos + match.start()
+                    match_end = cursor_pos + match.end()
+                    cursor = editor.textCursor()
+                    cursor.setPosition(match_start)
+                    cursor.setPosition(match_end, QTextCursor.MoveMode.KeepAnchor)
                     editor.setTextCursor(cursor)
                     return True
-        return False
+                else:
+                    match = re.search(text, content, flags=regex_flags)
+                    if match:
+                        cursor = editor.textCursor()
+                        cursor.setPosition(match.start())
+                        cursor.setPosition(match.end(), QTextCursor.MoveMode.KeepAnchor)
+                        editor.setTextCursor(cursor)
+                        return True
+            else:
+                matches_objs = list(re.finditer(text, content, flags=regex_flags))
+                if not matches_objs:
+                    return False
+                prev_match = None
+                for m in matches_objs:
+                    if m.start() < cursor_pos:
+                        prev_match = m
+                if prev_match:
+                    cursor = editor.textCursor()
+                    cursor.setPosition(prev_match.start())
+                    cursor.setPosition(prev_match.end(), QTextCursor.MoveMode.KeepAnchor)
+                    editor.setTextCursor(cursor)
+                    return True
+                elif matches_objs:
+                    last_match = matches_objs[-1]
+                    cursor = editor.textCursor()
+                    cursor.setPosition(last_match.start())
+                    cursor.setPosition(last_match.end(), QTextCursor.MoveMode.KeepAnchor)
+                    editor.setTextCursor(cursor)
+                    return True
+            return False
 
     def handle_replace(self, search_text, replace_text, case_sensitive, is_regex):
         current_tab = self.tabs.currentWidget()
@@ -366,9 +581,9 @@ class MainWindow(QMainWindow):
         elif command_id == "close_tab":
             self.close_tab_action()
         elif command_id == "find":
-            self.show_search_dialog()
+            self.toggle_search_panel()
         elif command_id == "replace":
-            self.show_search_dialog()
+            self.toggle_search_panel()
         elif command_id == "undo":
             self.handle_undo()
         elif command_id == "redo":

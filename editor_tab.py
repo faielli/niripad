@@ -119,16 +119,17 @@ class CustomEditor(QPlainTextEdit):
         
         font = self.font()
         metrics = QFontMetrics(font)
-        space = 3 # pixels for padding
+        space = 5 # pixels for padding and separator
         
         return metrics.horizontalAdvance('9') * digits + space
 
     def folding_area_width(self):
-        return 20 if self.foldable_blocks else 0
+        return 20 if self.foldable_blocks else 14
 
     def update_sidebar_width(self):
         width = self.line_number_width() + self.folding_area_width()
         self.setViewportMargins(width, 0, 0, 0)
+        self.update_sidebar_area()
 
     def update_sidebar_area(self):
         ln_width = self.line_number_width()
@@ -141,14 +142,19 @@ class CustomEditor(QPlainTextEdit):
         self.foldable_blocks = {}
         self.folded_blocks = set()
         
-        # Scan for foldable blocks (e.g. Python)
+        # Scan for foldable blocks
         block = self.document().begin()
         while block.isValid():
             text = block.text()
-            # Simple regex-like check for Python blocks
-            if any(text.strip().startswith(k) and text.strip().endswith(':') for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try:', 'except ', 'with ']):
+            stripped = text.strip()
+            
+            # Python-style blocks
+            is_python_fold = any(stripped.startswith(k) and stripped.endswith(':') for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try:', 'except ', 'with '])
+            # C-style blocks
+            is_c_style_fold = stripped.endswith('{') and any(stripped.startswith(k) for k in ['if ', 'for ', 'while ', 'switch ', 'void ', 'int ', 'float ', 'char ', 'class ', 'struct '])
+            
+            if is_python_fold or is_c_style_fold:
                 start_block = block.blockNumber()
-                # Find end of block by looking at indentation
                 start_indent = len(text) - len(text.lstrip())
                 
                 next_block = block.next()
@@ -213,6 +219,8 @@ class CustomEditor(QPlainTextEdit):
             cursor = self.textCursor()
             cursor.movePosition(cursor.MoveOperation.Left)
             self.setTextCursor(cursor)
+            self.update_sidebar_width()
+            self.lineNumberArea.update()
             return
 
         if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
@@ -234,6 +242,8 @@ class CustomEditor(QPlainTextEdit):
             
             # Insert newline and indentation
             self.insertPlainText('\n' + indent)
+            self.update_sidebar_width()
+            self.lineNumberArea.update()
             return
 
         super().keyPressEvent(event)
@@ -263,13 +273,18 @@ class CustomEditor(QPlainTextEdit):
                 number = str(block_number + 1)
                 painter.setPen(self.palette().color(self.palette().ColorRole.Text))
                 painter.drawText(0, top, self.lineNumberArea.width() - 2, 
-                                 self.fontMetrics().height(),
-                                 Qt.AlignmentFlag.AlignRight, number)
+                                  self.fontMetrics().height(),
+                                  Qt.AlignmentFlag.AlignRight, number)
 
             block = block.next()
             top = bottom
             bottom = top + round(self.blockBoundingRect(block).height())
             block_number += 1
+            
+        # Draw vertical separator line on the right edge
+        separator_x = self.lineNumberArea.width() - 1
+        painter.setPen(QColor("#1e222a"))  # border color
+        painter.drawLine(separator_x, 0, separator_x, self.height())
 
 class EditorTab(QWidget):
     modified_changed = pyqtSignal(bool)
@@ -278,8 +293,10 @@ class EditorTab(QWidget):
         super().__init__()
         self.file_path = file_path
         self._is_modified = False
-
+        self._language = None
+        
         self.layout = QVBoxLayout(self)
+
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.editor = CustomEditor()
@@ -324,12 +341,17 @@ class EditorTab(QWidget):
             
             lang = detect_language(file_path, content)
             print(f"[DEBUG] Detected language: {lang}")
+            self._language = lang
             if lang:
                 self.highlighter.set_language(lang)
                 self.highlighter.rehighlight()
                 
         except Exception as e:
             print(f"Error loading file {file_path}: {e}")
+
+    @property
+    def language(self):
+        return self._language
 
     def save_file(self, file_path=None):
         if file_path:
@@ -355,6 +377,6 @@ class EditorTab(QWidget):
 
     def get_title(self):
         name = self.file_path if self.file_path else "Untitled"
-        if self._is_modified:
-            return f"*{name}"
+        if os.path.isfile(name):
+            return os.path.basename(name)
         return name
