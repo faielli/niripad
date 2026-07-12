@@ -7,3 +7,5 @@ venv/
 build/
 dist/
 .aider*
+.idea/
+.idea*
