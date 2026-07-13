@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint
-from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics
+from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
 
@@ -109,6 +109,11 @@ class CustomEditor(QPlainTextEdit):
         
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        
+        # Increase font size slightly to naturally increase line spacing
+        font = self.font()
+        font.setPointSize(font.pointSize() + 2)
+        self.setFont(font)
         
         self.textChanged.connect(self.update_foldable_blocks)
         self.cursorPositionChanged.connect(self.highlight_current_line)
@@ -288,20 +293,28 @@ class CustomEditor(QPlainTextEdit):
 
     def lineNumberAreaPaintEvent(self, event):
         painter = QPainter(self.lineNumberArea)
+        
+        # Increase font size slightly for line numbers
+        font = self.font()
+        font.setPointSize(font.pointSize() + 1)
+        painter.setFont(font)
+        
         painter.fillRect(event.rect(), self.palette().window())
         
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
-        top = round(self.blockBoundingGeometry(block).translated(0, -self.verticalScrollBar().value()).top())
+        cursor = QTextCursor(block)
+        rect = self.cursorRect(cursor)
+        top = round(rect.top())
         bottom = top + round(self.blockBoundingRect(block).height())
 
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
                 painter.setPen(QColor("#4C566A"))
-                painter.drawText(0, top, self.lineNumberArea.width() - 2, 
-                                   self.fontMetrics().height(),
-                                   Qt.AlignmentFlag.AlignRight, number)
+                painter.drawText(0, top + 4, self.lineNumberArea.width() - 2, 
+                                    bottom - top,
+                                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, number)
 
             block = block.next()
             top = bottom

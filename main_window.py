@@ -361,6 +361,13 @@ class MainWindow(QMainWindow):
             file_path, _ = QFileDialog.getOpenFileName(self, "Open File")
         
         if file_path:
+            # Check if a tab with the same file path is already open
+            for i in range(self.tabs.count()):
+                tab = self.tabs.widget(i)
+                if tab.file_path == file_path:
+                    self.tabs.setCurrentIndex(i)
+                    return
+            
             tab = EditorTab(file_path)
             index = self.tabs.addTab(tab, tab.get_title())
             self.tabs.setCurrentIndex(index)
@@ -383,7 +390,7 @@ class MainWindow(QMainWindow):
                 background: #3B4252;
             }
         """)
-        close_btn.clicked.connect(lambda: self.close_tab(index))
+        close_btn.clicked.connect(lambda checked, i=index: self.close_tab(i))
         # Use QTabBar.ButtonPosition(1) to explicitly create the 'Right' enum member
         # This avoids the AttributeError with .Right and the TypeError with raw int
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
@@ -423,6 +430,10 @@ class MainWindow(QMainWindow):
                 return
 
         self.tabs.removeTab(index)
+        
+        # If no tabs left, create a new one to ensure editor is never empty
+        if self.tabs.count() == 0:
+            self.new_file()
 
     def close_tab_action(self):
         self.close_tab(self.tabs.currentIndex())
