@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 
 
 
-from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon
+from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon, QShortcut
 from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from editor_tab import EditorTab
 from search_dialog import SearchPanel, GoToLinePanel
@@ -88,9 +88,14 @@ class MainWindow(QMainWindow):
             "command_palette": "Command Palette",
             "goto_line": "Go to Line"
         }
+        # Command Palette
         self.command_palette = CommandPalette(self.commands, self)
         self.command_palette.actionTriggered.connect(self.execute_command)
         self.command_palette.hide()
+        
+        # Add global shortcut for Ctrl+G
+        goto_shortcut = QShortcut(QKeySequence(self.config_manager.get_binding("goto_line")), self)
+        goto_shortcut.activated.connect(self.show_goto_line)
 
         self._setup_statusbar()
         self._create_menu()
@@ -719,4 +724,8 @@ class MainWindow(QMainWindow):
     def handle_goto_line(self, line_number):
         current_tab = self.tabs.currentWidget()
         if current_tab:
-            current_tab.editor.go_to_line(line_number)
+            max_lines = current_tab.editor.document().blockCount()
+            if 1 <= line_number <= max_lines:
+                current_tab.editor.go_to_line(line_number)
+            else:
+                self.goto_panel.set_error()

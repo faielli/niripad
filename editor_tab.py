@@ -125,7 +125,8 @@ class CustomEditor(QPlainTextEdit):
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
-        line_color = QColor("#434C5E")
+        line_color = QColor("#EBCB8B")
+        line_color.setAlpha(180)
         selection.format.setBackground(line_color)
         selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         selection.cursor = self.textCursor()
