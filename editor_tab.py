@@ -125,7 +125,7 @@ class CustomEditor(QPlainTextEdit):
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
-        line_color = QColor("#3B4252")
+        line_color = QColor("#434C5E")
         selection.format.setBackground(line_color)
         selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         selection.cursor = self.textCursor()
@@ -141,6 +141,19 @@ class CustomEditor(QPlainTextEdit):
             cursor = QTextCursor(block)
             self.setTextCursor(cursor)
             self.ensureCursorVisible()
+
+    def line_number_width(self):
+        digits = 1
+        max_value = max(1, self.blockCount())
+        while max_value >= 10:
+            max_value /= 10
+            digits += 1
+        
+        font = self.font()
+        metrics = QFontMetrics(font)
+        space = 12 # pixels for padding and separator
+        
+        return metrics.horizontalAdvance('9') * digits + space
 
     def folding_area_width(self):
         return 20 if self.foldable_blocks else 14

@@ -64,13 +64,18 @@ class ConfigManager:
             print(f"Error saving config: {e}")
 
     def load_keybindings(self):
+        # Start with defaults
+        self.keybindings = self.DEFAULT_KEYBINDINGS.copy()
+        
         if self.KEYBINDINGS_FILE.exists():
             try:
                 with open(self.KEYBINDINGS_FILE, 'r') as f:
-                    self.keybindings = json.load(f)
+                    user_bindings = json.load(f)
+                    # Merge user bindings into defaults
+                    self.keybindings.update(user_bindings)
             except Exception as e:
                 print(f"Error loading keybindings: {e}")
-                self.keybindings = self.DEFAULT_KEYBINDINGS.copy()
+
         else:
             self.keybindings = self.DEFAULT_KEYBINDINGS.copy()
             self.save_keybindings()

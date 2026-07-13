@@ -6,12 +6,6 @@ from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from PyQt6.QtGui import QColor
 
 class SearchPanel(QWidget):
-... (existing SearchPanel code) ...
-
-class SearchPanel(QWidget):
-... (existing SearchPanel code) ...
-
-class SearchPanel(QWidget):
     # Signals to communicate with the main window
     find_next_requested = pyqtSignal(str, bool, bool)
     find_prev_requested = pyqtSignal(str, bool, bool)
@@ -26,7 +20,7 @@ class SearchPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
-
+        
         # Search row
         inputs_layout = QHBoxLayout()
         inputs_layout.setSpacing(8)
@@ -40,7 +34,7 @@ class SearchPanel(QWidget):
         inputs_layout.addWidget(self.replace_input)
         
         layout.addLayout(inputs_layout)
-
+        
         # Options row
         options_layout = QHBoxLayout()
         options_layout.setSpacing(8)
@@ -62,7 +56,7 @@ class SearchPanel(QWidget):
         options_layout.addWidget(self.match_count_label)
         
         layout.addLayout(options_layout)
-
+        
         # Buttons row
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
