@@ -133,7 +133,7 @@ QTabWidget::pane {
 QTabBar::tab {
     background-color: #252A33;  /* bg1 */
     color: #4C566A;  /* fg2 */
-    padding: 8px 14px;
+    padding: 6px 16px;
     border: 1px solid #1e222a;  /* border */
     border-bottom: none;
     border-top-left-radius: 6px;
@@ -153,7 +153,6 @@ QTabBar::tab:selected {
     color: #ECEFF4;  /* snow storm */
     border-color: #434C5E;  /* bg3 */
     border-bottom: 2px solid #88C0D0;  /* accent */
-    padding-bottom: 5px;
 }
 
 QTabBar::close-button {
@@ -218,17 +217,17 @@ SEARCH_QSS = """
 STATUSBAR_QSS = """
 QStatusBar {
     background-color: #252A33;
-    border-top: 1px solid #1e222a;
+    border-top: 1px solid #3B4252;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 12px;
     color: #4C566A;
     min-height: 24px;
     max-height: 24px;
     padding: 0 8px;
 }
 QStatusBar::item {
-    border: none;
     background: transparent;
+    border: none;
 }
 QLabel {
     color: inherit;

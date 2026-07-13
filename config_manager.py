@@ -29,7 +29,8 @@ class ConfigManager:
         "replace": "Ctrl+H",
         "undo": "Ctrl+Z",
         "redo": "Ctrl+Y",
-        "command_palette": "Ctrl+Shift+P"
+        "command_palette": "Ctrl+Shift+P",
+        "goto_line": "Ctrl+G"
     }
 
     def __init__(self):

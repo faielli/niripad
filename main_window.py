@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon
 from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from editor_tab import EditorTab
-from search_dialog import SearchPanel
+from search_dialog import SearchPanel, GoToLinePanel
 from file_tree import FileTree
 from command_palette import CommandPalette
 from config_manager import ConfigManager
@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         
         # Main Splitter
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setStyleSheet("QSplitter::handle { background-color: #3B4252; width: 1px; }")
         self.setCentralWidget(self.splitter)
 
         # File Tree
@@ -60,6 +61,13 @@ class MainWindow(QMainWindow):
         self.search_panel.close_requested.connect(self.toggle_search_panel)
         self.editor_layout.addWidget(self.search_panel)
 
+        # Go to Line Panel
+        self.goto_panel = GoToLinePanel()
+        self.goto_panel.goto_requested.connect(self.handle_goto_line)
+        self.goto_panel.close_requested.connect(self.hide_goto_line)
+        self.goto_panel.hide()
+        self.editor_layout.addWidget(self.goto_panel)
+
         self.splitter.addWidget(self.editor_container)
         
         # Set initial splitter proportions
@@ -77,7 +85,8 @@ class MainWindow(QMainWindow):
             "replace": "Replace",
             "undo": "Undo",
             "redo": "Redo",
-            "command_palette": "Command Palette"
+            "command_palette": "Command Palette",
+            "goto_line": "Go to Line"
         }
         self.command_palette = CommandPalette(self.commands, self)
         self.command_palette.actionTriggered.connect(self.execute_command)
@@ -255,6 +264,12 @@ class MainWindow(QMainWindow):
         redo_action.setShortcut(QKeySequence(self.config_manager.get_binding("redo")))
         redo_action.triggered.connect(self.handle_redo)
         edit_menu.addAction(redo_action)
+
+        # Go to Line
+        goto_line_action = QAction("Go to Line", self)
+        goto_line_action.setShortcut(QKeySequence(self.config_manager.get_binding("goto_line")))
+        goto_line_action.triggered.connect(self.show_goto_line)
+        edit_menu.addAction(goto_line_action)
 
         # Command Palette
         palette_action = QAction("&Command Palette", self)
@@ -690,3 +705,18 @@ class MainWindow(QMainWindow):
             self.handle_redo()
         elif command_id == "command_palette":
             self.show_command_palette()
+        elif command_id == "goto_line":
+            self.show_goto_line()
+
+    def show_goto_line(self):
+        self.goto_panel.show()
+        self.goto_panel.input.setFocus()
+        self.goto_panel.input.clear()
+
+    def hide_goto_line(self):
+        self.goto_panel.hide()
+
+    def handle_goto_line(self, line_number):
+        current_tab = self.tabs.currentWidget()
+        if current_tab:
+            current_tab.editor.go_to_line(line_number)

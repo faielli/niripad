@@ -134,18 +134,13 @@ class CustomEditor(QPlainTextEdit):
         extra_selections.append(selection)
         self.setExtraSelections(extra_selections)
 
-    def line_number_width(self):
-        digits = 1
-        max_value = max(1, self.blockCount())
-        while max_value >= 10:
-            max_value /= 10
-            digits += 1
-        
-        font = self.font()
-        metrics = QFontMetrics(font)
-        space = 12 # pixels for padding and separator
-        
-        return metrics.horizontalAdvance('9') * digits + space
+    def go_to_line(self, line_number):
+        # line_number is 1-indexed
+        block = self.document().findBlockByLineNumber(line_number - 1)
+        if block.isValid():
+            cursor = QTextCursor(block)
+            self.setTextCursor(cursor)
+            self.ensureCursorVisible()
 
     def folding_area_width(self):
         return 20 if self.foldable_blocks else 14

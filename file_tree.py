@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QHBoxLayout, QLabel, QMenu, QMessageBox, 
     QInputDialog, QApplication, QPushButton, QFileDialog, QStyle
 )
-from PyQt6.QtGui import QFont, QIcon, QColor
+from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QPixmap
 from PyQt6.QtCore import pyqtSignal, QDir, Qt
 import os
 import shutil
@@ -15,20 +15,17 @@ QListWidget {
     outline: none;
 }
 QListWidget::item {
-    padding: 4px 16px;
+    padding: 7px 12px;
     color: #8892a0;
-    border-left: 2px solid transparent;
-    border-radius: 0px;
+    border-radius: 4px;
 }
 QListWidget::item:hover {
-    background-color: #3B4252;
+    background-color: #2E3440;
     color: #D8DEE9;
-    border-left-color: #88C0D0;
 }
 QListWidget::item:selected {
-    background-color: #434C5E;
-    color: #D8DEE9;
-    border-left-color: #88C0D0;
+    background-color: #3B4252;
+    color: #ECEFF4;
 }
 """
 
@@ -48,6 +45,17 @@ class FileTree(QWidget):
         self.folder_btn = QPushButton()
         self.folder_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         self.folder_btn.setFixedWidth(32)
+        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.folder_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QPushButton:hover {
+                background: #3B4252;
+            }
+        """)
         self.folder_btn.clicked.connect(self.on_browse_folder)
         
         self.path_layout.addWidget(self.folder_btn)
@@ -77,6 +85,16 @@ class FileTree(QWidget):
             self.current_root = abs_path
             self._populate(self.current_root)
 
+    def _get_tinted_icon(self, standard_pixmap_enum, color="#88C0D0"):
+        icon = self.style().standardIcon(standard_pixmap_enum)
+        pixmap = icon.pixmap(16, 16)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.setBrush(QColor(color))
+        painter.drawRect(pixmap.rect())
+        painter.end()
+        return QIcon(pixmap)
+
     def _populate(self, path):
         self.list.clear()
         
@@ -91,13 +109,13 @@ class FileTree(QWidget):
             parent_item.setForeground(QColor("#4C566A"))
             parent_item.setData(Qt.ItemDataRole.UserRole, "PARENT")
             self.list.addItem(parent_item)
-
+        
         try:
             entries = os.listdir(path)
         except PermissionError:
             # Handle directories we can't read
             return
-
+        
         # 2. Separate directories and files
         dirs = []
         files = []
@@ -107,22 +125,22 @@ class FileTree(QWidget):
                 dirs.append(entry)
             else:
                 files.append(entry)
-
+        
         # Sort case-insensitive
         dirs.sort(key=str.lower)
         files.sort(key=str.lower)
-
+        
         # Add directories
         for d in dirs:
             item = QListWidgetItem(d)
-            item.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon))
+            item.setIcon(self._get_tinted_icon(QStyle.StandardPixmap.SP_DirIcon))
             item.setData(Qt.ItemDataRole.UserRole, os.path.join(path, d))
             self.list.addItem(item)
-
+        
         # Add files
         for f in files:
             item = QListWidgetItem(f)
-            item.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+            item.setIcon(self._get_tinted_icon(QStyle.StandardPixmap.SP_FileIcon))
             item.setData(Qt.ItemDataRole.UserRole, os.path.join(path, f))
             self.list.addItem(item)
 

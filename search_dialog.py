@@ -2,7 +2,14 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, 
     QPushButton, QLabel
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer
+from PyQt6.QtGui import QColor
+
+class SearchPanel(QWidget):
+... (existing SearchPanel code) ...
+
+class SearchPanel(QWidget):
+... (existing SearchPanel code) ...
 
 class SearchPanel(QWidget):
     # Signals to communicate with the main window
@@ -143,3 +150,71 @@ class SearchPanel(QWidget):
             self.case_sensitive.isChecked(),
             self.is_regex.isChecked()
         )
+
+class GoToLinePanel(QWidget):
+    goto_requested = pyqtSignal(int)
+    close_requested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("goto_line_panel")
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(8)
+        
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Go to line...")
+        self.input.setFixedWidth(200)
+        self.input.setStyleSheet("""
+            #goto_line_panel QLineEdit {
+                background-color: #3B4252;
+                border: 1px solid #88C0D0;
+                border-radius: 4px;
+                color: #ECEFF4;
+                padding: 4px;
+                font-family: 'JetBrains Mono', monospace;
+            }
+            #goto_line_panel QLineEdit:focus {
+                border: 1px solid #88C0D0;
+            }
+        """)
+        self.input.returnPressed.connect(self._on_enter)
+        self.input.installEventFilter(self)
+        
+        layout.addWidget(self.input)
+        layout.addStretch()
+
+    def eventFilter(self, obj, event):
+        if obj is self.input and event.type() == event.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self.close_requested.emit()
+                return True
+        return super().eventFilter(obj, event)
+
+    def _on_enter(self):
+        try:
+            line_number = int(self.input.text())
+            if line_number > 0:
+                self.goto_requested.emit(line_number)
+                self.close_requested.emit()
+            else:
+                self.set_error()
+        except ValueError:
+            self.set_error()
+
+    def set_error(self):
+        self.input.setStyleSheet(self.input.styleSheet() + "border: 1px solid #BF616A;")
+        QTimer.singleShot(1000, self.reset_style)
+
+    def reset_style(self):
+        self.input.setStyleSheet("""
+            #goto_line_panel QLineEdit {
+                background-color: #3B4252;
+                border: 1px solid #88C0D0;
+                border-radius: 4px;
+                color: #ECEFF4;
+                padding: 4px;
+                font-family: 'JetBrains Mono', monospace;
+            }
+        """)
