@@ -132,8 +132,8 @@ QTabWidget::pane {
 
 QTabBar::tab {
     background-color: #252A33;  /* bg1 */
-    color: #8892a0;  /* fg1 */
-    padding: 12px 14px;
+    color: #4C566A;  /* fg2 */
+    padding: 8px 14px;
     border: 1px solid #1e222a;  /* border */
     border-bottom: none;
     border-top-left-radius: 6px;
@@ -141,15 +141,16 @@ QTabBar::tab {
     margin-right: 2px;
     min-width: 180px;
     max-width: 300px;
-    min-height: 36px;
+    min-height: 28px;
     line-height: 1.3;
 }
 QTabBar::tab:hover {
-    color: #8892a0;  /* fg1 */
+    background-color: #2E3440;
+    color: #D8DEE9;  /* fg0 */
 }
 QTabBar::tab:selected {
-    background-color: #2E3440;  /* bg0 */
-    color: #D8DEE9;  /* fg0 */
+    background-color: #3B4252;  /* bg2 */
+    color: #ECEFF4;  /* snow storm */
     border-color: #434C5E;  /* bg3 */
     border-bottom: 2px solid #88C0D0;  /* accent */
     padding-bottom: 5px;
@@ -161,6 +162,10 @@ QTabBar::close-button {
     border-radius: 3px;
     width: 16px;
     height: 16px;
+    color: #8892a0;
+}
+QTabBar::tab:selected QTabBar::close-button {
+    color: #D8DEE9;
 }
 QTabBar::close-button:hover {
     background: #3B4252;

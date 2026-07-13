@@ -36,8 +36,9 @@ class CommandPalette(QDialog):
         self.setStyleSheet("""
             QDialog {
                 background-color: #2E3440;
-                border: 1px solid #4C566A;
+                border: 1px solid #88C0D0;
                 border-radius: 8px;
+                font-family: 'JetBrains Mono', monospace;
             }
             QLineEdit {
                 background-color: transparent;
@@ -46,21 +47,27 @@ class CommandPalette(QDialog):
                 padding: 10px 14px;
                 color: #D8DEE9;
                 border-bottom: 1px solid #3B4252;
+                font-family: 'JetBrains Mono', monospace;
             }
             QListWidget {
                 background-color: transparent;
                 border: none;
                 padding: 4px 0;
                 outline: 0;
+                font-family: 'JetBrains Mono', monospace;
             }
             QListWidget::item {
-                padding: 8px 14px;
+                padding: 10px 14px;
                 color: #8892a0;
                 font-size: 12px;
                 border-radius: 4px;
                 margin: 1px 4px;
             }
-            QListWidget::item:selected, QListWidget::item:hover {
+            QListWidget::item:selected {
+                background-color: #434C5E;
+                color: #D8DEE9;
+            }
+            QListWidget::item:hover {
                 background-color: #3B4252;
                 color: #D8DEE9;
             }
@@ -95,9 +102,11 @@ class CommandPalette(QDialog):
         if event.key() == Qt.Key.Key_Escape:
             self.reject()
         elif event.key() == Qt.Key.Key_Down:
-            self.action_list.setCurrentRow((self.action_list.currentRow() + 1) % self.action_list.count())
+            if self.action_list.count() > 0:
+                self.action_list.setCurrentRow((self.action_list.currentRow() + 1) % self.action_list.count())
         elif event.key() == Qt.Key.Key_Up:
-            self.action_list.setCurrentRow((self.action_list.currentRow() - 1) % self.action_list.count())
+            if self.action_list.count() > 0:
+                self.action_list.setCurrentRow((self.action_list.currentRow() - 1) % self.action_list.count())
         else:
             super().keyPressEvent(event)
 

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 
 
 from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon
-from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from editor_tab import EditorTab
 from search_dialog import SearchPanel
 from file_tree import FileTree
@@ -88,6 +88,8 @@ class MainWindow(QMainWindow):
         
         # Initial tab
         self.new_file()
+        self._restore_session()
+        self._start_autosave_timer()
 
     def _setup_statusbar(self):
         self.statusBar().setMinimumHeight(24)
@@ -266,11 +268,92 @@ class MainWindow(QMainWindow):
         keybindings_action.triggered.connect(self.show_keybindings_dialog)
         settings_menu.addAction(keybindings_action)
 
+    def _start_autosave_timer(self):
+        self.autosave_timer = QTimer(self)
+        self.autosave_timer.timeout.connect(self._do_autosave)
+        self.autosave_timer.start(30000)  # 30 seconds
+
+    def _do_autosave(self):
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if tab and tab.is_modified():
+                if tab.file_path:
+                    tab.save_file()
+                else:
+                    cache_dir = self.config_manager.get_cache_dir()
+                    temp_path = os.path.join(cache_dir, f"Untitled_{i}.txt")
+                    tab.save_file(temp_path)
+                    # Reset modified flag so we don't save constantly if nothing changed
+                    # Since save_file does this, it's actually OK.
+
+    def _save_session(self):
+        session_data = {
+            "tabs": [],
+            "current_index": self.tabs.currentIndex(),
+            "geometry": {
+                "pos": (self.x(), self.y()),
+                "size": (self.width(), self.height())
+            },
+            "splitter_sizes": self.splitter.sizes()
+        }
+        
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if tab:
+                session_data["tabs"].append({
+                    "path": tab.file_path,
+                    "content": tab.editor.toPlainText() if not tab.file_path else None
+                })
+        
+        self.config_manager.save_session(session_data)
+
+    def _restore_session(self):
+        session_data = self.config_manager.load_session()
+        if not session_data:
+            return
+
+        # Restore geometry
+        geo = session_data.get("geometry")
+        if geo:
+            self.move(geo["pos"][0], geo["pos"][1])
+            self.resize(geo["size"][0], geo["size"][1])
+
+        # Restore splitter sizes
+        sizes = session_data.get("splitter_sizes")
+        if sizes:
+            self.splitter.setSizes(sizes)
+
+        # Restore tabs
+        tabs = session_data.get("tabs")
+        if tabs:
+            # Remove the initial tab created in __init__
+            if self.tabs.count() > 0:
+                self.tabs.removeTab(0)
+                
+            for tab_info in tabs:
+                path = tab_info.get("path")
+                content = tab_info.get("content")
+                
+                if path:
+                    self.open_file(path)
+                else:
+                    # Manually create a tab for untitled content
+                    tab = EditorTab()
+                    index = self.tabs.addTab(tab, tab.get_title())
+                    tab.editor.setPlainText(content or "")
+                    tab.modified_changed.connect(lambda i=index: self.update_tab_title(i))
+                    self.add_close_button(index)
+        
+        current_index = session_data.get("current_index", 0)
+        if current_index < self.tabs.count():
+            self.tabs.setCurrentIndex(current_index)
+
+
     def new_file(self):
         tab = EditorTab()
         index = self.tabs.addTab(tab, tab.get_title())
         self.tabs.setCurrentIndex(index)
-        tab.modified_changed.connect(lambda: self.update_tab_title(index))
+        tab.modified_changed.connect(lambda i=index: self.update_tab_title(i))
         self.add_close_button(index)
 
     def open_file(self, file_path=None):
@@ -281,7 +364,7 @@ class MainWindow(QMainWindow):
             tab = EditorTab(file_path)
             index = self.tabs.addTab(tab, tab.get_title())
             self.tabs.setCurrentIndex(index)
-            tab.modified_changed.connect(lambda: self.update_tab_title(index))
+            tab.modified_changed.connect(lambda i=index: self.update_tab_title(i))
             self.add_close_button(index)
 
     def add_close_button(self, index):
@@ -380,8 +463,14 @@ class MainWindow(QMainWindow):
         self.tabs.setTabText(index, title)
 
     def closeEvent(self, event):
+        # Final autosave
+        self._do_autosave()
+        # Save session
+        self._save_session()
+        
         # Basic loop to check all tabs before closing
         for i in range(self.tabs.count() - 1, -1, -1):
+
             tab = self.tabs.widget(i)
             if tab and tab.is_modified():
                 ret = QMessageBox.question(

@@ -6,6 +6,9 @@ class ConfigManager:
     CONFIG_DIR = Path.home() / ".config" / "niri-editor"
     CONFIG_FILE = CONFIG_DIR / "config.json"
     KEYBINDINGS_FILE = CONFIG_DIR / "keybindings.json"
+    SESSION_FILE = CONFIG_DIR / "session.json"
+    CACHE_DIR = Path.home() / ".cache" / "niri-editor" / "unsaved"
+
 
     DEFAULT_CONFIG = {
         "theme": "nord",
@@ -78,7 +81,29 @@ class ConfigManager:
         except Exception as e:
             print(f"Error saving keybindings: {e}")
 
+    def load_session(self):
+        if self.SESSION_FILE.exists():
+            try:
+                with open(self.SESSION_FILE, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading session: {e}")
+        return None
+
+    def save_session(self, session_data):
+        try:
+            self._ensure_config_dir()
+            with open(self.SESSION_FILE, 'w') as f:
+                json.dump(session_data, f, indent=4)
+        except Exception as e:
+            print(f"Error saving session: {e}")
+
+    def get_cache_dir(self):
+        self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        return self.CACHE_DIR
+
     def get(self, key, default=None):
+
         return self.config.get(key, default)
 
     def set(self, key, value):

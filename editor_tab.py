@@ -1,5 +1,5 @@
 import os
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint
 from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics
 from syntax_highlighter import UniversalHighlighter
@@ -101,14 +101,33 @@ class LineNumberArea(QWidget):
 class CustomEditor(QPlainTextEdit):
     def __init__(self):
         super().__init__()
+        self.language = None
         self.lineNumberArea = LineNumberArea(self)
         self.foldingArea = CodeFoldingArea(self)
         self.foldable_blocks = {} # start_block: end_block
         self.folded_blocks = set() # set of start_blocks
         
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        
         self.textChanged.connect(self.update_foldable_blocks)
+        self.cursorPositionChanged.connect(self.highlight_current_line)
         self.update_sidebar_width()
         self.update_foldable_blocks()
+        self.highlight_current_line()
+
+    def highlight_current_line(self):
+        extra_selections = []
+        
+        selection = QTextEdit.ExtraSelection()
+        line_color = QColor("#3B4252")
+        selection.format.setBackground(line_color)
+        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        selection.cursor = self.textCursor()
+        selection.cursor.clearSelection()
+        
+        extra_selections.append(selection)
+        self.setExtraSelections(extra_selections)
 
     def line_number_width(self):
         digits = 1
@@ -119,7 +138,7 @@ class CustomEditor(QPlainTextEdit):
         
         font = self.font()
         metrics = QFontMetrics(font)
-        space = 5 # pixels for padding and separator
+        space = 12 # pixels for padding and separator
         
         return metrics.horizontalAdvance('9') * digits + space
 
@@ -149,7 +168,7 @@ class CustomEditor(QPlainTextEdit):
             stripped = text.strip()
             
             # Python-style blocks
-            is_python_fold = any(stripped.startswith(k) and stripped.endswith(':') for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try:', 'except ', 'with '])
+            is_python_fold = stripped.endswith(':') and any(stripped.startswith(k) for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try', 'except', 'with '])
             # C-style blocks
             is_c_style_fold = stripped.endswith('{') and any(stripped.startswith(k) for k in ['if ', 'for ', 'while ', 'switch ', 'void ', 'int ', 'float ', 'char ', 'class ', 'struct '])
             
@@ -236,9 +255,17 @@ class CustomEditor(QPlainTextEdit):
                 else:
                     break
             
-            # Extra indent if line ends with colon (e.g. Python)
-            if line.strip().endswith(':'):
-                indent += "    "
+            # Smart indentation based on language
+            stripped = line.strip()
+            if stripped:
+                if self.language == "python":
+                    if stripped.endswith(':'):
+                        indent += "    "
+                elif self.language in ["cpp", "c", "javascript", "java", "rust", "css", "html"]:
+                    if stripped.endswith('{'):
+                        indent += "    "
+                    elif stripped == '}':
+                        indent = indent[:-4] if len(indent) >= 4 else ""
             
             # Insert newline and indentation
             self.insertPlainText('\n' + indent)
@@ -271,10 +298,10 @@ class CustomEditor(QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
-                painter.setPen(self.palette().color(self.palette().ColorRole.Text))
+                painter.setPen(QColor("#4C566A"))
                 painter.drawText(0, top, self.lineNumberArea.width() - 2, 
-                                  self.fontMetrics().height(),
-                                  Qt.AlignmentFlag.AlignRight, number)
+                                   self.fontMetrics().height(),
+                                   Qt.AlignmentFlag.AlignRight, number)
 
             block = block.next()
             top = bottom
@@ -345,6 +372,7 @@ class EditorTab(QWidget):
             if lang:
                 self.highlighter.set_language(lang)
                 self.highlighter.rehighlight()
+                self.editor.language = lang
                 
         except Exception as e:
             print(f"Error loading file {file_path}: {e}")

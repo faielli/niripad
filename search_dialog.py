@@ -81,6 +81,35 @@ class SearchPanel(QWidget):
         btn_layout.addWidget(self.close_btn)
         
         layout.addLayout(btn_layout)
+        
+        self.setStyleSheet("""
+            #search_panel {
+                border-top: 1px solid #3B4252;
+            }
+            QLineEdit {
+                background-color: #3B4252;
+                border: 1px solid #4C566A;
+                border-radius: 4px;
+                color: #D8DEE9;
+                padding: 4px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #88C0D0;
+            }
+            QPushButton {
+                background-color: #3B4252;
+                color: #D8DEE9;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                background-color: #434C5E;
+            }
+            QLabel {
+                color: #4C566A;
+            }
+        """)
 
     def set_match_count(self, current, total):
         self.match_count_label.setText(f"{current} of {total}")

@@ -143,7 +143,7 @@ class UniversalHighlighter(QSyntaxHighlighter):
         self.rules.append((re.compile(number_pattern), self._create_format(Theme.get_color(self.theme, "number"))))
         
         # 8. Operators
-        self.rules.append((re.compile(operator_pattern), self. _create_format(Theme.get_color(self.theme, "operator"))))
+        self.rules.append((re.compile(operator_pattern), self._create_format(Theme.get_color(self.theme, "operator"))))
 
     def _create_format(self, color):
         fmt = QTextCharFormat()
