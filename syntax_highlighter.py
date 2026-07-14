@@ -3,7 +3,7 @@ from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat
 from theme import Theme
 
 class UniversalHighlighter(QSyntaxHighlighter):
-    def __init__(self, parent, theme_dict=Theme.NORD):
+    def __init__(self, parent, theme_dict=Theme.LILAC):
         super().__init__(parent)
         self.theme = theme_dict
         self.rules = []

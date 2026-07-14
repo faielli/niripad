@@ -62,7 +62,7 @@ class CodeFoldingArea(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(event.rect(), self.palette().window())
+        painter.fillRect(event.rect(), QColor("#1E1A2E"))
         
         block = self.editor.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -74,7 +74,7 @@ class CodeFoldingArea(QWidget):
                 fold_end = self.editor.foldable_blocks.get(block_number)
                 if fold_end is not None:
                     is_folded = block_number in self.editor.folded_blocks
-                    painter.setPen(self.palette().color(self.palette().ColorRole.Text))
+                    painter.setPen(QColor("#9B6DFF"))
                     if is_folded:
                         # Triangle pointing right (folded)
                         painter.drawPolygon([QPoint(5, top + 4), QPoint(5, top + 12), QPoint(12, top + 8)])
@@ -125,8 +125,8 @@ class CustomEditor(QPlainTextEdit):
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
-        line_color = QColor("#3B4252")
-        line_color.setAlpha(180)
+        line_color = QColor("#332E50")
+        line_color.setAlpha(200)
         selection.format.setBackground(line_color)
         selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         selection.cursor = self.textCursor()
@@ -314,7 +314,7 @@ class CustomEditor(QPlainTextEdit):
         font.setPointSize(font.pointSize() + 1)
         painter.setFont(font)
         
-        painter.fillRect(event.rect(), self.palette().window())
+        painter.fillRect(event.rect(), QColor("#1E1A2E"))
         
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -326,7 +326,7 @@ class CustomEditor(QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
-                painter.setPen(QColor("#4C566A"))
+                painter.setPen(QColor("#5C5478"))
                 painter.drawText(0, top + 4, self.lineNumberArea.width() - 2, 
                                     bottom - top,
                                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, number)
@@ -338,7 +338,7 @@ class CustomEditor(QPlainTextEdit):
             
         # Draw vertical separator line on the right edge
         separator_x = self.lineNumberArea.width() - 1
-        painter.setPen(QColor("#1e222a"))  # border color
+        painter.setPen(QColor("#2F2A47"))
         painter.drawLine(separator_x, 0, separator_x, self.height())
 
 class EditorTab(QWidget):
@@ -361,7 +361,7 @@ class EditorTab(QWidget):
         self.layout.addWidget(self.editor)
 
         # Setup theme and highlighter
-        self.current_theme = Theme.NORD
+        self.current_theme = Theme.LILAC
         self.apply_theme()
         
         self.highlighter = UniversalHighlighter(self.editor.document(), self.current_theme)
@@ -379,7 +379,9 @@ class EditorTab(QWidget):
                 background-color: {bg_color.name()};
                 color: {fg_color.name()};
                 border: none;
-                font-family: 'Consolas', 'Monospace', 'Courier New';
+                selection-background-color: #3D3660;
+                selection-color: #EDE8FF;
+                font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Monospace';
                 font-size: 12pt;
             }}
         """)

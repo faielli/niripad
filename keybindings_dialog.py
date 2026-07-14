@@ -36,46 +36,47 @@ class KeybindingsDialog(QDialog):
         # Apply Nord styling to the dialog
         self.setStyleSheet("""
             QDialog {
-                background-color: #2E3440;
-                color: #D8DEE9;
+                background-color: #FAF7FE;
+                color: #3C2E56;
+                font-family: 'Quicksand', 'Segoe UI', sans-serif;
             }
             QLabel {
-                color: #D8DEE9;
+                color: #3C2E56;
                 font-size: 13px;
                 margin-bottom: 10px;
             }
             QListWidget {
-                background-color: #3B4252;
-                border: 1px solid #4C566A;
-                border-radius: 4px;
-                color: #D8DEE9;
+                background-color: #FFFFFF;
+                border: 1px solid #E1D3F5;
+                border-radius: 10px;
+                color: #3C2E56;
                 font-size: 13px;
                 outline: 0;
                 padding: 4px;
             }
             QListWidget::item {
-                padding: 6px;
-                border-radius: 3px;
+                padding: 7px;
+                border-radius: 6px;
             }
             QListWidget::item:selected {
-                background-color: #4C566A;
-                color: #88C0D0;
+                background-color: #E4D4F7;
+                color: #7C4DEF;
             }
             QPushButton {
-                background-color: #434C5E;
-                color: #D8DEE9;
-                border: 1px solid #4C566A;
-                border-radius: 4px;
+                background-color: #F2EAFC;
+                color: #3C2E56;
+                border: 1px solid #E1D3F5;
+                border-radius: 10px;
                 padding: 6px 15px;
                 font-size: 13px;
                 min-width: 80px;
             }
             QPushButton:hover {
-                background-color: #4C566A;
-                border-color: #88C0D0;
+                background-color: #F1E6FC;
+                border-color: #8B5CF6;
             }
             QPushButton:pressed {
-                background-color: #3B4252;
+                background-color: #E4D4F7;
             }
         """)
 

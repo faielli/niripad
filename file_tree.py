@@ -2,44 +2,51 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
     QMenu, QMessageBox, QInputDialog, QFileDialog, QStyle
 )
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtCore import pyqtSignal, Qt
 import os
 import shutil
 
 FILETREE_QSS = """
 QTreeWidget {
-    background-color: #252A33;
+    background-color: #1E1A2E;
     border: none;
     outline: none;
     show-decoration-selected: 1;
+    font-family: 'Quicksand', 'Segoe UI', sans-serif;
+    font-size: 13px;
+    color: #A89CC8;
 }
 QTreeWidget::item {
-    padding: 4px 8px;
-    color: #8892a0;
-    border-radius: 4px;
+    padding: 3px 6px;
+    min-height: 22px;
+    color: #A89CC8;
+    border-radius: 5px;
 }
 QTreeWidget::item:hover {
-    background-color: #2E3440;
-    color: #D8DEE9;
+    background-color: #2A2440;
+    color: #EDE8FF;
 }
 QTreeWidget::item:selected {
-    background-color: #3B4252;
-    color: #ECEFF4;
-}
-QTreeView::branch:has-children:!has-siblings:closed,
-QTreeView::branch:closed:has-children:has-siblings {
-    image: url(none);
-    border-image: none;
-}
-QTreeView::branch:open:has-children:!has-siblings,
-QTreeView::branch:open:has-children:has-siblings {
-    image: url(none);
-    border-image: none;
+    background-color: #2E2060;
+    color: #EDE8FF;
 }
 QTreeView::branch {
-    background: #2E3440;
+    background: #1E1A2E;
 }
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+}
+QScrollBar::handle:vertical {
+    background: #3D3660;
+    border-radius: 4px;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #5A4E8A;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 """
 
 class FileTree(QWidget):
@@ -71,6 +78,15 @@ class FileTree(QWidget):
         # Initialize population
         self._populate(self.current_root)
 
+    def _colored_icon(self, icon_type, color):
+        icon = self.style().standardIcon(icon_type)
+        pixmap = icon.pixmap(16, 16)
+        mask = pixmap.mask()
+        result = QPixmap(pixmap.size())
+        result.fill(QColor(color))
+        result.setMask(mask)
+        return QIcon(result)
+
     def on_browse_folder(self):
         new_path = QFileDialog.getExistingDirectory(self, "Select Root Folder", self.current_root)
         if new_path:
@@ -93,7 +109,7 @@ class FileTree(QWidget):
             font = parent_item.font(0)
             font.setItalic(True)
             parent_item.setFont(0, font)
-            parent_item.setForeground(0, QColor("#4C566A"))
+            parent_item.setForeground(0, QColor("#B7A8D9"))
             parent_item.setData(0, Qt.ItemDataRole.UserRole, "PARENT")
         
         # 2. Immediate contents only
@@ -122,7 +138,7 @@ class FileTree(QWidget):
         for d in dirs:
             full_path = os.path.join(path, d)
             item = QTreeWidgetItem(parent_item, [d])
-            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DirClosedIcon))
+            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirClosedIcon, "#9B6DFF"))
             item.setData(0, Qt.ItemDataRole.UserRole, full_path)
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
             item.setData(0, Qt.ItemDataRole.UserRole + 1, False)  # not yet populated
@@ -132,7 +148,7 @@ class FileTree(QWidget):
         for f in files:
             full_path = os.path.join(path, f)
             item = QTreeWidgetItem(parent_item, [f])
-            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_FileIcon, "#5C5478"))
             item.setData(0, Qt.ItemDataRole.UserRole, full_path)
 
     def _on_item_clicked(self, item, column):
@@ -149,7 +165,7 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirOpenIcon, "#9B6DFF"))
             
             populated = item.data(0, Qt.ItemDataRole.UserRole + 1)
             if not populated:
@@ -164,7 +180,7 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DirClosedIcon))
+            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirClosedIcon, "#9B6DFF"))
 
     def _on_item_double_clicked(self, item, column):
         path = item.data(0, Qt.ItemDataRole.UserRole)

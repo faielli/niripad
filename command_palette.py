@@ -35,41 +35,41 @@ class CommandPalette(QDialog):
         # Apply styling
         self.setStyleSheet("""
             QDialog {
-                background-color: #2E3440;
-                border: 1px solid #88C0D0;
-                border-radius: 8px;
-                font-family: 'JetBrains Mono', monospace;
+                background-color: #FFFFFF;
+                border: 1px solid #CBAEEB;
+                border-radius: 14px;
+                font-family: 'Quicksand', 'Segoe UI', sans-serif;
             }
             QLineEdit {
                 background-color: transparent;
                 border: none;
                 font-size: 14px;
-                padding: 10px 14px;
-                color: #D8DEE9;
-                border-bottom: 1px solid #3B4252;
-                font-family: 'JetBrains Mono', monospace;
+                padding: 12px 16px;
+                color: #3C2E56;
+                border-bottom: 1px solid #E1D3F5;
+                font-family: 'Quicksand', 'Segoe UI', sans-serif;
             }
             QListWidget {
                 background-color: transparent;
                 border: none;
-                padding: 4px 0;
+                padding: 6px;
                 outline: 0;
-                font-family: 'JetBrains Mono', monospace;
+                font-family: 'Quicksand', 'Segoe UI', sans-serif;
             }
             QListWidget::item {
                 padding: 10px 14px;
-                color: #8892a0;
+                color: #8577A3;
                 font-size: 12px;
-                border-radius: 4px;
-                margin: 1px 4px;
+                border-radius: 8px;
+                margin: 2px 2px;
             }
             QListWidget::item:selected {
-                background-color: #434C5E;
-                color: #D8DEE9;
+                background-color: #E4D4F7;
+                color: #3C2E56;
             }
             QListWidget::item:hover {
-                background-color: #3B4252;
-                color: #D8DEE9;
+                background-color: #F1E6FC;
+                color: #3C2E56;
             }
         """)
 

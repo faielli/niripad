@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
         self.sidebar_visible = True
         self.sidebar_width = 250
 
-        # Sidebar toggle button (moved to sidebar header)
+        # Sidebar toggle button (first item in sidebar)
         self.sidebar_toggle = QPushButton()
         self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
         self.sidebar_toggle.setFixedHeight(28)
@@ -41,11 +41,13 @@ class MainWindow(QMainWindow):
         self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
         self.sidebar_toggle.setStyleSheet("""
             QPushButton {
-                background: transparent;
+                background: #1E1A2E;
                 border: none;
+                border-bottom: 1px solid #2F2A47;
+                border-radius: 0px;
             }
             QPushButton:hover {
-                background: #3B4252;
+                background: #2A2440;
             }
         """)
 
@@ -68,42 +70,43 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
             }
             QPushButton:hover {
-                background: #3B4252;
+                background: #2A2440;
             }
         """)
 
-        # Sidebar Header (contains folder button only)
+        # Sidebar Header (contains folder button only, below toggle)
         self.sidebar_header = QWidget()
         self.sidebar_header.setFixedHeight(28)
-        self.sidebar_header.setStyleSheet("background-color: #252A33;")
+        self.sidebar_header.setStyleSheet("background-color: #1E1A2E; border-bottom: 1px solid #2F2A47;")
         header_layout = QHBoxLayout(self.sidebar_header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(0)
         header_layout.addStretch()
         header_layout.addWidget(self.folder_btn)
 
-        # Sidebar Content (header + file tree, managed by splitter)
+        # Sidebar Content (toggle + header + file tree)
         self.sidebar_content = QWidget()
-        sidebar_layout = QVBoxLayout(self.sidebar_content)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(0)
-        sidebar_layout.addWidget(self.sidebar_header)
-        sidebar_layout.addWidget(self.file_tree)
+        self.sidebar_content.setStyleSheet("background-color: #1E1A2E;")
+        self.sidebar_layout = QVBoxLayout(self.sidebar_content)
+        self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        self.sidebar_layout.setSpacing(0)
+        self.sidebar_layout.addWidget(self.sidebar_toggle)
+        self.sidebar_layout.addWidget(self.sidebar_header)
+        self.sidebar_layout.addWidget(self.file_tree)
 
         # Main Splitter (sidebar_content + editor_area)
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setStyleSheet("QSplitter::handle { background-color: #3B4252; width: 1px; }")
+        self.splitter.setStyleSheet("QSplitter::handle { background-color: #2F2A47; width: 1px; }")
         self.splitter.setHandleWidth(1)
 
-        # Toggle Strip (always visible outside splitter, 40px wide)
+        # Toggle Strip (thin strip visible only when sidebar is closed)
         self.toggle_strip = QWidget()
-        self.toggle_strip.setFixedWidth(40)
-        self.toggle_strip.setStyleSheet("background-color: #252A33;")
-        strip_layout = QVBoxLayout(self.toggle_strip)
-        strip_layout.setContentsMargins(0, 0, 0, 0)
-        strip_layout.setSpacing(0)
-        strip_layout.addWidget(self.sidebar_toggle)
-        strip_layout.addStretch()
+        self.toggle_strip.setFixedWidth(20)
+        self.toggle_strip.setStyleSheet("background-color: #1E1A2E; border-right: 1px solid #2F2A47;")
+        self.strip_layout = QVBoxLayout(self.toggle_strip)
+        self.strip_layout.setContentsMargins(0, 0, 0, 0)
+        self.strip_layout.setSpacing(0)
+        self.toggle_strip.hide()
 
         # Main container: toggle_strip + splitter
         self.main_container = QWidget()
@@ -124,7 +127,40 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.tabs.setStyleSheet("QTabWidget::pane { border: none; } QTabBar::tab { background: #252A33; color: #4C566A; padding: 6px 16px; border-radius: 6px 6px 0px 0px; } QTabBar::tab:selected { background: #3B4252; color: #ECEFF4; border-bottom: 2px solid #88C0D0; } QTabBar::tab:hover:!selected { background: #2E3440; color: #D8DEE9; }")
+        self.tabs.setStyleSheet("""
+            QTabWidget { background-color: #2A2440; }
+            QTabWidget::pane {
+                border: none;
+                border-top: 1px solid #2F2A47;
+                background-color: #2A2440;
+            }
+            QTabWidget > QWidget { background-color: #13101F; }
+            QTabBar { background-color: #13101F; border-bottom: 1px solid #2F2A47; }
+            QTabBar::tab {
+                background-color: #13101F;
+                color: #5C5478;
+                padding: 7px 18px;
+                border: none;
+                border-right: 1px solid #2F2A47;
+                border-bottom: 2px solid transparent;
+                min-width: 110px; max-width: 240px; min-height: 28px;
+                font-size: 12px;
+            }
+            QTabBar::tab:!selected { background-color: #13101F; color: #5C5478; }
+            QTabBar::tab:hover:!selected {
+                background-color: #1E1A2E;
+                color: #A89CC8;
+                border-bottom: 2px solid #3D3660;
+            }
+            QTabBar::tab:selected {
+                background-color: #2A2440;
+                color: #EDE8FF;
+                border-bottom: 2px solid #9B6DFF;
+                font-weight: 600;
+            }
+            QTabBar::close-button { background: transparent; border-radius: 4px; width: 14px; height: 14px; }
+            QTabBar::close-button:hover { background: #3D1525; border: 1px solid #FF6B8A; }
+        """)
         self.editor_layout.addWidget(self.tabs)
         
         # Search Panel
@@ -195,54 +231,65 @@ class MainWindow(QMainWindow):
         self._start_autosave_timer()
 
     def toggle_sidebar(self):
+        total = sum(self.splitter.sizes())
         if self.sidebar_visible:
-            total = sum(self.splitter.sizes())
+            self.sidebar_layout.removeWidget(self.sidebar_toggle)
+            self.strip_layout.addStretch()
+            self.strip_layout.addWidget(self.sidebar_toggle)
+            self.strip_layout.addStretch()
             self.splitter.setSizes([0, total])
+            self.sidebar_content.hide()
+            self.toggle_strip.show()
             self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
         else:
-            total = sum(self.splitter.sizes())
+            self.strip_layout.takeAt(2)
+            self.strip_layout.removeWidget(self.sidebar_toggle)
+            self.strip_layout.takeAt(0)
+            self.sidebar_layout.insertWidget(0, self.sidebar_toggle)
             self.splitter.setSizes([self.sidebar_width, total - self.sidebar_width])
+            self.sidebar_content.show()
+            self.toggle_strip.hide()
             self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
         self.sidebar_visible = not self.sidebar_visible
 
     def _setup_statusbar(self):
         self.statusBar().setMinimumHeight(24)
-        self.statusBar().setStyleSheet("background: #252A33; border-top: 1px solid #3B4252; font-size: 12px;")
+        self.statusBar().setStyleSheet("background: #13101F; border-top: 1px solid #2F2A47; font-size: 11px; color: #5C5478;")
         
         # Left side widgets
         self.lang_label = QLabel("Plain Text")
-        self.lang_label.setStyleSheet("color: #88C0D0;")
+        self.lang_label.setStyleSheet("color: #9B6DFF; font-weight: 600;")
         self.statusBar().addWidget(self.lang_label)
 
         separator1 = QLabel(" | ")
-        separator1.setStyleSheet("color: #4C566A;")
+        separator1.setStyleSheet("color: #2F2A47;")
         self.statusBar().addWidget(separator1)
         
         
         
         self.line_col_label = QLabel("Ln 1, Col 1")
-        self.line_col_label.setStyleSheet("color: #8892a0;")
+        self.line_col_label.setStyleSheet("color: #5C5478;")
         self.statusBar().addWidget(self.line_col_label)
 
         separator2 = QLabel(" | ")
-        separator2.setStyleSheet("color: #4C566A;")
+        separator2.setStyleSheet("color: #2F2A47;")
         self.statusBar().addWidget(separator2)
         
         # Right side widgets (Permanent)
         self.git_label = QLabel("")
-        self.git_label.setStyleSheet("color: #A3BE8C;")
+        self.git_label.setStyleSheet("color: #79DDA8;")
         self.statusBar().addWidget(self.git_label) # Changed from addPermanentWidget
         
         self.encoding_label = QLabel("UTF-8")
-        self.encoding_label.setStyleSheet("color: #4C566A;")
+        self.encoding_label.setStyleSheet("color: #5C5478;")
         self.statusBar().addWidget(self.encoding_label) # Changed from addPermanentWidget
 
         separator3 = QLabel(" | ")
-        separator3.setStyleSheet("color: #4C566A;")
+        separator3.setStyleSheet("color: #2F2A47;")
         self.statusBar().addWidget(separator3)
         
         self.tabsize_label = QLabel("Spaces: 4")
-        self.tabsize_label.setStyleSheet("color: #4C566A;")
+        self.tabsize_label.setStyleSheet("color: #5C5478;")
         self.statusBar().addWidget(self.tabsize_label) # Changed from addPermanentWidget
         
         # Connections
@@ -298,7 +345,7 @@ class MainWindow(QMainWindow):
 
     def _create_file_status_icons(self):
         icons = {}
-        for state, color in [("saved", "#A3BE8C"), ("modified", "#EBCB8B")]:
+        for state, color in [("saved", "#5FAE7D"), ("modified", "#E8B84B")]:
             pixmap = QPixmap(12, 12)
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
@@ -519,7 +566,7 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
             }
             QPushButton:hover {
-                background: #3B4252;
+                background: #3D1525;
             }
         """)
         close_btn.clicked.connect(lambda checked, i=index: self.close_tab(i))
@@ -616,14 +663,14 @@ class MainWindow(QMainWindow):
         
         if tab.is_modified():
             # Color the entire tab text yellow to indicate modification
-            tab_bar.setTabTextColor(index, QColor("#EBCB8B"))
+            tab_bar.setTabTextColor(index, QColor("#E8B84B"))
             self.tabs.setTabIcon(index, self.status_icons["modified"])
         else:
             # Restore default colors based on selection state
             if self.tabs.currentIndex() == index:
-                tab_bar.setTabTextColor(index, QColor("#D8DEE9"))  # fg0
+                tab_bar.setTabTextColor(index, QColor("#EDE8FF"))  # fg0
             else:
-                tab_bar.setTabTextColor(index, QColor("#8892a0"))  # fg1
+                tab_bar.setTabTextColor(index, QColor("#5C5478"))  # fg1
             self.tabs.setTabIcon(index, self.status_icons["saved"])
         
         self.tabs.setTabText(index, title)

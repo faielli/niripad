@@ -85,30 +85,31 @@ class SearchPanel(QWidget):
         
         self.setStyleSheet("""
             #search_panel {
-                border-top: 1px solid #3B4252;
+                border-top: 1px solid #E1D3F5;
             }
             QLineEdit {
-                background-color: #3B4252;
-                border: 1px solid #4C566A;
-                border-radius: 4px;
-                color: #D8DEE9;
+                background-color: #FFFFFF;
+                border: 1px solid #E1D3F5;
+                border-radius: 8px;
+                color: #3C2E56;
                 padding: 4px;
             }
             QLineEdit:focus {
-                border: 1px solid #88C0D0;
+                border: 1px solid #8B5CF6;
             }
             QPushButton {
-                background-color: #3B4252;
-                color: #D8DEE9;
-                border: none;
-                border-radius: 4px;
+                background-color: #FFFFFF;
+                color: #3C2E56;
+                border: 1px solid #E1D3F5;
+                border-radius: 8px;
                 padding: 4px 8px;
             }
             QPushButton:hover {
-                background-color: #434C5E;
+                background-color: #F1E6FC;
+                border-color: #CBAEEB;
             }
             QLabel {
-                color: #4C566A;
+                color: #B7A8D9;
             }
         """)
 
@@ -162,15 +163,15 @@ class GoToLinePanel(QWidget):
         self.input.setFixedWidth(200)
         self.input.setStyleSheet("""
             #goto_line_panel QLineEdit {
-                background-color: #3B4252;
-                border: 1px solid #88C0D0;
-                border-radius: 4px;
-                color: #ECEFF4;
+                background-color: #FFFFFF;
+                border: 1px solid #8B5CF6;
+                border-radius: 8px;
+                color: #3C2E56;
                 padding: 4px;
                 font-family: 'JetBrains Mono', monospace;
             }
             #goto_line_panel QLineEdit:focus {
-                border: 1px solid #88C0D0;
+                border: 1px solid #8B5CF6;
             }
         """)
         self.input.returnPressed.connect(self._on_enter)
@@ -198,16 +199,16 @@ class GoToLinePanel(QWidget):
             self.set_error()
 
     def set_error(self):
-        self.input.setStyleSheet(self.input.styleSheet() + "border: 1px solid #BF616A;")
+        self.input.setStyleSheet(self.input.styleSheet() + "border: 1px solid #E0708F;")
         QTimer.singleShot(1000, self.reset_style)
 
     def reset_style(self):
         self.input.setStyleSheet("""
             #goto_line_panel QLineEdit {
-                background-color: #3B4252;
-                border: 1px solid #88C0D0;
-                border-radius: 4px;
-                color: #ECEFF4;
+                background-color: #FFFFFF;
+                border: 1px solid #8B5CF6;
+                border-radius: 8px;
+                color: #3C2E56;
                 padding: 4px;
                 font-family: 'JetBrains Mono', monospace;
             }
