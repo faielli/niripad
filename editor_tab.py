@@ -125,7 +125,7 @@ class CustomEditor(QPlainTextEdit):
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
-        line_color = QColor("#EBCB8B")
+        line_color = QColor("#3B4252")
         line_color.setAlpha(180)
         selection.format.setBackground(line_color)
         selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
@@ -288,6 +288,12 @@ class CustomEditor(QPlainTextEdit):
             return
 
         super().keyPressEvent(event)
+        # Ensure cursor is visible after navigation
+        if event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down, 
+                           Qt.Key.Key_PageUp, Qt.Key.Key_PageDown,
+                           Qt.Key.Key_Home, Qt.Key.Key_End):
+            self.ensureCursorVisible()
+            self.highlight_current_line()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -407,15 +413,12 @@ class EditorTab(QWidget):
         if file_path:
             self.file_path = file_path
         
-        try:
-            with open(self.file_path, 'w', encoding='utf-8') as f:
-                f.write(self.editor.toPlainText())
-            self._is_modified = False
-            self.modified_changed.emit(self._is_modified)
-            return True
-        except Exception as e:
-            print(f"Error saving file {self.file_path}: {e}")
-            return False
+        with open(self.file_path, 'w', encoding='utf-8') as f:
+            f.write(self.editor.toPlainText())
+        
+        self._is_modified = False
+        self.modified_changed.emit(self._is_modified)
+        return True
 
     def on_text_changed(self):
         if not self._is_modified:

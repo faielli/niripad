@@ -3,7 +3,7 @@ import re
 import subprocess
 from PyQt6.QtWidgets import (
     QMainWindow, QTabWidget, QFileDialog, QMessageBox, 
-    QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QLabel,
+    QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabBar, QStyle
 )
 
@@ -29,26 +29,102 @@ class MainWindow(QMainWindow):
         # Status icons
         self.status_icons = self._create_file_status_icons()
         
-        # Main Splitter
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setStyleSheet("QSplitter::handle { background-color: #3B4252; width: 1px; }")
-        self.setCentralWidget(self.splitter)
+        self.sidebar_visible = True
+        self.sidebar_width = 250
+
+        # Sidebar toggle button (moved to sidebar header)
+        self.sidebar_toggle = QPushButton()
+        self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+        self.sidebar_toggle.setFixedHeight(28)
+        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sidebar_toggle.setToolTip("Toggle sidebar (Ctrl+B)")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        self.sidebar_toggle.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+            }
+            QPushButton:hover {
+                background: #3B4252;
+            }
+        """)
 
         # File Tree
         self.file_tree = FileTree(os.getcwd())
         self.file_tree.fileOpened.connect(self.open_file)
-        self.splitter.addWidget(self.file_tree)
+        self.file_tree.setMinimumWidth(200)
+
+        # Folder selection button
+        self.folder_btn = QPushButton()
+        self.folder_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+        self.folder_btn.setFixedSize(28, 28)
+        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.folder_btn.setToolTip("Select root folder")
+        self.folder_btn.clicked.connect(self.file_tree.on_browse_folder)
+        self.folder_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background: #3B4252;
+            }
+        """)
+
+        # Sidebar Header (contains folder button only)
+        self.sidebar_header = QWidget()
+        self.sidebar_header.setFixedHeight(28)
+        self.sidebar_header.setStyleSheet("background-color: #252A33;")
+        header_layout = QHBoxLayout(self.sidebar_header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
+        header_layout.addStretch()
+        header_layout.addWidget(self.folder_btn)
+
+        # Sidebar Content (header + file tree, managed by splitter)
+        self.sidebar_content = QWidget()
+        sidebar_layout = QVBoxLayout(self.sidebar_content)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+        sidebar_layout.addWidget(self.sidebar_header)
+        sidebar_layout.addWidget(self.file_tree)
+
+        # Main Splitter (sidebar_content + editor_area)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setStyleSheet("QSplitter::handle { background-color: #3B4252; width: 1px; }")
+        self.splitter.setHandleWidth(1)
+
+        # Toggle Strip (always visible outside splitter, 40px wide)
+        self.toggle_strip = QWidget()
+        self.toggle_strip.setFixedWidth(40)
+        self.toggle_strip.setStyleSheet("background-color: #252A33;")
+        strip_layout = QVBoxLayout(self.toggle_strip)
+        strip_layout.setContentsMargins(0, 0, 0, 0)
+        strip_layout.setSpacing(0)
+        strip_layout.addWidget(self.sidebar_toggle)
+        strip_layout.addStretch()
+
+        # Main container: toggle_strip + splitter
+        self.main_container = QWidget()
+        main_layout = QHBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.toggle_strip)
+        main_layout.addWidget(self.splitter)
+        self.setCentralWidget(self.main_container)
 
         # Editor Container (Tabs + Search Panel)
         self.editor_container = QWidget()
         self.editor_layout = QVBoxLayout(self.editor_container)
         self.editor_layout.setContentsMargins(0, 0, 0, 0)
         self.editor_layout.setSpacing(0)
-
+        
         # Tabs
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.setStyleSheet("QTabWidget::pane { border: none; } QTabBar::tab { background: #252A33; color: #4C566A; padding: 6px 16px; border-radius: 6px 6px 0px 0px; } QTabBar::tab:selected { background: #3B4252; color: #ECEFF4; border-bottom: 2px solid #88C0D0; } QTabBar::tab:hover:!selected { background: #2E3440; color: #D8DEE9; }")
         self.editor_layout.addWidget(self.tabs)
         
         # Search Panel
@@ -60,7 +136,7 @@ class MainWindow(QMainWindow):
         self.search_panel.replace_all_requested.connect(self.handle_replace_all)
         self.search_panel.close_requested.connect(self.toggle_search_panel)
         self.editor_layout.addWidget(self.search_panel)
-
+        
         # Go to Line Panel
         self.goto_panel = GoToLinePanel()
         self.goto_panel.goto_requested.connect(self.handle_goto_line)
@@ -68,7 +144,16 @@ class MainWindow(QMainWindow):
         self.goto_panel.hide()
         self.editor_layout.addWidget(self.goto_panel)
 
-        self.splitter.addWidget(self.editor_container)
+        # Editor Area (no toggle — just the editor container)
+        self.editor_area = QWidget()
+        editor_hlayout = QHBoxLayout(self.editor_area)
+        editor_hlayout.setContentsMargins(0, 0, 0, 0)
+        editor_hlayout.setSpacing(0)
+        editor_hlayout.addWidget(self.editor_container)
+
+        # Add both widgets to splitter: sidebar content first, editor second
+        self.splitter.addWidget(self.sidebar_content)
+        self.splitter.addWidget(self.editor_area)
         
         # Set initial splitter proportions
         self.splitter.setStretchFactor(0, 0)
@@ -97,6 +182,10 @@ class MainWindow(QMainWindow):
         goto_shortcut = QShortcut(QKeySequence(self.config_manager.get_binding("goto_line")), self)
         goto_shortcut.activated.connect(self.show_goto_line)
 
+        # Add global shortcut for Ctrl+B (Toggle Sidebar)
+        sidebar_shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
+        sidebar_shortcut.activated.connect(self.toggle_sidebar)
+        
         self._setup_statusbar()
         self._create_menu()
         
@@ -105,34 +194,56 @@ class MainWindow(QMainWindow):
         self._restore_session()
         self._start_autosave_timer()
 
+    def toggle_sidebar(self):
+        if self.sidebar_visible:
+            total = sum(self.splitter.sizes())
+            self.splitter.setSizes([0, total])
+            self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
+        else:
+            total = sum(self.splitter.sizes())
+            self.splitter.setSizes([self.sidebar_width, total - self.sidebar_width])
+            self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+        self.sidebar_visible = not self.sidebar_visible
+
     def _setup_statusbar(self):
         self.statusBar().setMinimumHeight(24)
+        self.statusBar().setStyleSheet("background: #252A33; border-top: 1px solid #3B4252; font-size: 12px;")
         
         # Left side widgets
         self.lang_label = QLabel("Plain Text")
         self.lang_label.setStyleSheet("color: #88C0D0;")
         self.statusBar().addWidget(self.lang_label)
+
+        separator1 = QLabel(" | ")
+        separator1.setStyleSheet("color: #4C566A;")
+        self.statusBar().addWidget(separator1)
         
-        separator = QLabel(" | ")
-        separator.setStyleSheet("color: #4C566A;")
-        self.statusBar().addWidget(separator)
+        
         
         self.line_col_label = QLabel("Ln 1, Col 1")
         self.line_col_label.setStyleSheet("color: #8892a0;")
         self.statusBar().addWidget(self.line_col_label)
+
+        separator2 = QLabel(" | ")
+        separator2.setStyleSheet("color: #4C566A;")
+        self.statusBar().addWidget(separator2)
         
         # Right side widgets (Permanent)
         self.git_label = QLabel("")
         self.git_label.setStyleSheet("color: #A3BE8C;")
-        self.statusBar().addPermanentWidget(self.git_label)
+        self.statusBar().addWidget(self.git_label) # Changed from addPermanentWidget
         
         self.encoding_label = QLabel("UTF-8")
         self.encoding_label.setStyleSheet("color: #4C566A;")
-        self.statusBar().addPermanentWidget(self.encoding_label)
+        self.statusBar().addWidget(self.encoding_label) # Changed from addPermanentWidget
+
+        separator3 = QLabel(" | ")
+        separator3.setStyleSheet("color: #4C566A;")
+        self.statusBar().addWidget(separator3)
         
         self.tabsize_label = QLabel("Spaces: 4")
         self.tabsize_label.setStyleSheet("color: #4C566A;")
-        self.statusBar().addPermanentWidget(self.tabsize_label)
+        self.statusBar().addWidget(self.tabsize_label) # Changed from addPermanentWidget
         
         # Connections
         self.tabs.currentChanged.connect(self._update_statusbar)
@@ -297,14 +408,15 @@ class MainWindow(QMainWindow):
         for i in range(self.tabs.count()):
             tab = self.tabs.widget(i)
             if tab and tab.is_modified():
-                if tab.file_path:
-                    tab.save_file()
-                else:
-                    cache_dir = self.config_manager.get_cache_dir()
-                    temp_path = os.path.join(cache_dir, f"Untitled_{i}.txt")
-                    tab.save_file(temp_path)
-                    # Reset modified flag so we don't save constantly if nothing changed
-                    # Since save_file does this, it's actually OK.
+                try:
+                    if tab.file_path:
+                        tab.save_file()
+                    else:
+                        cache_dir = self.config_manager.get_cache_dir()
+                        temp_path = os.path.join(cache_dir, f"Untitled_{i}.txt")
+                        tab.save_file(temp_path)
+                except Exception as e:
+                    print(f"Autosave failed for tab {i}: {e}")
 
     def _save_session(self):
         session_data = {
@@ -415,6 +527,21 @@ class MainWindow(QMainWindow):
         # This avoids the AttributeError with .Right and the TypeError with raw int
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
 
+    def show_save_error(self, exception, file_path):
+        import errno
+        error_msg = str(exception)
+        
+        if isinstance(exception, PermissionError):
+            user_msg = f"Permission denied: You don't have rights to write to {file_path}"
+        elif isinstance(exception, OSError) and exception.errno == errno.ENOSPC:
+            user_msg = "Disk full: There is no space left on the device to save the file."
+        elif isinstance(exception, FileNotFoundError):
+            user_msg = f"File not found: The path {file_path} is invalid."
+        else:
+            user_msg = f"An unexpected error occurred while saving {file_path}:\n{error_msg}"
+            
+        QMessageBox.critical(self, "Save Error", user_msg)
+
     def save_file(self):
 
         index = self.tabs.currentIndex()
@@ -426,11 +553,14 @@ class MainWindow(QMainWindow):
         current_tab = self.tabs.currentWidget()
         if not current_tab:
             return
-
+        
         file_path, _ = QFileDialog.getSaveFileName(self, "Save File As")
         if file_path:
-            current_tab.save_file(file_path)
-            self.update_tab_title(self.tabs.currentIndex())
+            try:
+                current_tab.save_file(file_path)
+                self.update_tab_title(self.tabs.currentIndex())
+            except Exception as e:
+                self.show_save_error(e, file_path)
 
     def close_tab(self, index):
         tab = self.tabs.widget(index)
@@ -462,13 +592,18 @@ class MainWindow(QMainWindow):
         tab = self.tabs.widget(index)
         if not tab:
             return False
-        if tab.file_path:
-            return tab.save_file()
-        else:
-            # Save As
-            file_path, _ = QFileDialog.getSaveFileName(self, "Save File As")
-            if file_path:
-                return tab.save_file(file_path)
+        
+        try:
+            if tab.file_path:
+                return tab.save_file()
+            else:
+                # Save As
+                file_path, _ = QFileDialog.getSaveFileName(self, "Save File As")
+                if file_path:
+                    return tab.save_file(file_path)
+                return False
+        except Exception as e:
+            self.show_save_error(e, tab.file_path or "Unknown Path")
             return False
 
     def update_tab_title(self, index):
