@@ -9,42 +9,41 @@ import shutil
 
 FILETREE_QSS = """
 QTreeWidget {
-    background-color: #1E1A2E;
+    background: transparent;
     border: none;
     outline: none;
-    show-decoration-selected: 1;
     font-family: 'Quicksand', 'Segoe UI', sans-serif;
     font-size: 13px;
-    color: #A89CC8;
+    color: #C8BFE8;
 }
 QTreeWidget::item {
-    padding: 3px 6px;
-    min-height: 22px;
-    color: #A89CC8;
-    border-radius: 5px;
+    padding: 4px 8px;
+    min-height: 44px;
+    color: #C8BFE8;
+    border-radius: 4px;
 }
 QTreeWidget::item:hover {
     background-color: #2A2440;
     color: #EDE8FF;
 }
 QTreeWidget::item:selected {
-    background-color: #2E2060;
+    background-color: #332E50;
     color: #EDE8FF;
 }
 QTreeView::branch {
-    background: #1E1A2E;
+    background: transparent;
 }
 QScrollBar:vertical {
     background: transparent;
     width: 8px;
 }
 QScrollBar::handle:vertical {
-    background: #3D3660;
+    background: #5A4E8A;
     border-radius: 4px;
     min-height: 20px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #5A4E8A;
+    background: #A885FF;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 """

@@ -1,4 +1,5 @@
 from PyQt6.QtGui import QColor
+from theme_tokens import Tokens
 
 class Theme:
     NORD = {
@@ -9,23 +10,22 @@ class Theme:
         "bold": "#EBCB8B", "italic": "#A3BE8C", "link": "#88C0D0", "code": "#4C566A",
     }
 
-    # Dark Lilac — editor background è L2 (#2A2440), testo leggibile su di esso
     LILAC = {
-        "background":  "#2A2440",   # L2 — editor bg
-        "foreground":  "#EDE8FF",   # testo principale
-        "keyword":     "#B78DFF",   # lilla chiaro
-        "string":      "#79DDA8",   # menta
-        "comment":     "#5C5478",   # muted — quasi invisibile, buono per commenti
-        "function":    "#F29EDB",   # rosa
-        "number":      "#CF9FFF",   # lavanda
-        "type":        "#FFD085",   # ambra
-        "operator":    "#9D91C4",   # grigio-lilla
-        "decorator":   "#F29EDB",   # rosa (uguale a function)
-        "heading":     "#B78DFF",
-        "bold":        "#FFD085",
-        "italic":      "#79DDA8",
-        "link":        "#7EB8F7",
-        "code":        "#5C5478",
+        "background":  Tokens.BG_APP.name(),
+        "foreground":  Tokens.FG_PRIMARY.name(),
+        "keyword":     Tokens.SYN_KEYWORD.name(),
+        "string":      Tokens.SYN_STRING.name(),
+        "comment":     Tokens.SYN_COMMENT.name(),
+        "function":    Tokens.SYN_FUNC.name(),
+        "number":      Tokens.SYN_NUMBER.name(),
+        "type":        Tokens.SYN_TYPE.name(),
+        "operator":    Tokens.SYN_OPER.name(),
+        "decorator":   Tokens.SYN_FUNC.name(),
+        "heading":     Tokens.SYN_KEYWORD.name(),
+        "bold":        Tokens.SYN_TYPE.name(),
+        "italic":      Tokens.SYN_STRING.name(),
+        "link":        QColor("#7EB8F7").name(),
+        "code":        Tokens.SYN_COMMENT.name(),
     }
 
     LIGHT = {
@@ -36,4 +36,4 @@ class Theme:
 
     @staticmethod
     def get_color(theme_dict, key):
-        return QColor(theme_dict.get(key, "#EDE8FF"))
+        return QColor(theme_dict.get(key, Tokens.FG_PRIMARY.name()))

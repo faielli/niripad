@@ -2,14 +2,14 @@ import os
 import re
 import subprocess
 from PyQt6.QtWidgets import (
-    QMainWindow, QTabWidget, QFileDialog, QMessageBox, 
+    QMainWindow, QTabWidget, QFileDialog, QMessageBox,
     QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QTabBar, QStyle
+    QPushButton, QTabBar, QToolButton, QSizePolicy
 )
-
-
-
-from PyQt6.QtGui import QAction, QKeySequence, QTextCursor, QTextDocument, QColor, QPixmap, QPainter, QIcon, QShortcut
+from PyQt6.QtGui import (
+    QAction, QKeySequence, QTextCursor, QTextDocument, QColor,
+    QPixmap, QPainter, QIcon, QShortcut, QGuiApplication
+)
 from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from editor_tab import EditorTab
 from search_dialog import SearchPanel, GoToLinePanel
@@ -17,6 +17,9 @@ from file_tree import FileTree
 from command_palette import CommandPalette
 from config_manager import ConfigManager
 from keybindings_dialog import KeybindingsDialog
+from icon_utils import Icons
+from qss_tokens import apply_shadow
+from theme_tokens import Tokens
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -32,66 +35,16 @@ class MainWindow(QMainWindow):
         self.sidebar_visible = True
         self.sidebar_width = 250
 
-        # Sidebar toggle button (first item in sidebar)
-        self.sidebar_toggle = QPushButton()
-        self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
-        self.sidebar_toggle.setFixedHeight(28)
-        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.sidebar_toggle.setToolTip("Toggle sidebar (Ctrl+B)")
-        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
-        self.sidebar_toggle.setStyleSheet("""
-            QPushButton {
-                background: #1E1A2E;
-                border: none;
-                border-bottom: 1px solid #2F2A47;
-                border-radius: 0px;
-            }
-            QPushButton:hover {
-                background: #2A2440;
-            }
-        """)
-
-        # File Tree
         self.file_tree = FileTree(os.getcwd())
         self.file_tree.fileOpened.connect(self.open_file)
         self.file_tree.setMinimumWidth(200)
 
-        # Folder selection button
-        self.folder_btn = QPushButton()
-        self.folder_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
-        self.folder_btn.setFixedSize(28, 28)
-        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.folder_btn.setToolTip("Select root folder")
-        self.folder_btn.clicked.connect(self.file_tree.on_browse_folder)
-        self.folder_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background: #2A2440;
-            }
-        """)
-
-        # Sidebar Header (contains folder button only, below toggle)
-        self.sidebar_header = QWidget()
-        self.sidebar_header.setFixedHeight(28)
-        self.sidebar_header.setStyleSheet("background-color: #1E1A2E; border-bottom: 1px solid #2F2A47;")
-        header_layout = QHBoxLayout(self.sidebar_header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
-        header_layout.addStretch()
-        header_layout.addWidget(self.folder_btn)
-
-        # Sidebar Content (toggle + header + file tree)
+        # Sidebar Content (header + file tree)
         self.sidebar_content = QWidget()
         self.sidebar_content.setStyleSheet("background-color: #1E1A2E;")
         self.sidebar_layout = QVBoxLayout(self.sidebar_content)
         self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
         self.sidebar_layout.setSpacing(0)
-        self.sidebar_layout.addWidget(self.sidebar_toggle)
-        self.sidebar_layout.addWidget(self.sidebar_header)
         self.sidebar_layout.addWidget(self.file_tree)
 
         # Main Splitter (sidebar_content + editor_area)
@@ -103,9 +56,19 @@ class MainWindow(QMainWindow):
         self.toggle_strip = QWidget()
         self.toggle_strip.setFixedWidth(20)
         self.toggle_strip.setStyleSheet("background-color: #1E1A2E; border-right: 1px solid #2F2A47;")
-        self.strip_layout = QVBoxLayout(self.toggle_strip)
-        self.strip_layout.setContentsMargins(0, 0, 0, 0)
-        self.strip_layout.setSpacing(0)
+        strip_layout = QVBoxLayout(self.toggle_strip)
+        strip_layout.setContentsMargins(0, 0, 0, 0)
+        strip_layout.setSpacing(0)
+        strip_layout.addStretch()
+        self.strip_arrow = QLabel()
+        self.strip_arrow.setPixmap(Icons(Tokens.ICON_STROKE).chevron_right().pixmap(14, 14))
+        self.strip_arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.strip_arrow.setFixedHeight(30)
+        self.strip_arrow.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.strip_arrow.setToolTip("Show sidebar (Ctrl+B)")
+        self.strip_arrow.mousePressEvent = lambda _: self.toggle_sidebar()
+        strip_layout.addWidget(self.strip_arrow)
+        strip_layout.addStretch()
         self.toggle_strip.hide()
 
         # Main container: toggle_strip + splitter
@@ -162,6 +125,36 @@ class MainWindow(QMainWindow):
             QTabBar::close-button:hover { background: #3D1525; border: 1px solid #FF6B8A; }
         """)
         self.editor_layout.addWidget(self.tabs)
+
+        # Tab bar corner widget (sidebar toggle + folder open)
+        corner = QWidget()
+        corner_layout = QHBoxLayout(corner)
+        corner_layout.setContentsMargins(2, 0, 2, 0)
+        corner_layout.setSpacing(2)
+
+        ico = Icons(Tokens.ICON_STROKE)
+
+        self.sidebar_toggle = QToolButton()
+        self.sidebar_toggle.setIcon(ico.chevron_left())
+        self.sidebar_toggle.setFixedSize(28, 28)
+        self.sidebar_toggle.setAutoRaise(True)
+        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sidebar_toggle.setToolTip("Toggle sidebar (Ctrl+B)")
+        self.sidebar_toggle.setAccessibleName("Toggle sidebar")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        corner_layout.addWidget(self.sidebar_toggle)
+
+        self.folder_btn = QToolButton()
+        self.folder_btn.setIcon(ico.folder())
+        self.folder_btn.setFixedSize(28, 28)
+        self.folder_btn.setAutoRaise(True)
+        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.folder_btn.setToolTip("Select root folder")
+        self.folder_btn.setAccessibleName("Select root folder")
+        self.folder_btn.clicked.connect(self.file_tree.on_browse_folder)
+        corner_layout.addWidget(self.folder_btn)
+
+        self.tabs.setCornerWidget(corner, Qt.Corner.TopLeftCorner)
         
         # Search Panel
         self.search_panel = SearchPanel()
@@ -233,23 +226,15 @@ class MainWindow(QMainWindow):
     def toggle_sidebar(self):
         total = sum(self.splitter.sizes())
         if self.sidebar_visible:
-            self.sidebar_layout.removeWidget(self.sidebar_toggle)
-            self.strip_layout.addStretch()
-            self.strip_layout.addWidget(self.sidebar_toggle)
-            self.strip_layout.addStretch()
             self.splitter.setSizes([0, total])
             self.sidebar_content.hide()
             self.toggle_strip.show()
-            self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
+            self.sidebar_toggle.setIcon(Icons(Tokens.ICON_STROKE).chevron_right())
         else:
-            self.strip_layout.takeAt(2)
-            self.strip_layout.removeWidget(self.sidebar_toggle)
-            self.strip_layout.takeAt(0)
-            self.sidebar_layout.insertWidget(0, self.sidebar_toggle)
             self.splitter.setSizes([self.sidebar_width, total - self.sidebar_width])
             self.sidebar_content.show()
             self.toggle_strip.hide()
-            self.sidebar_toggle.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+            self.sidebar_toggle.setIcon(Icons(Tokens.ICON_STROKE).chevron_left())
         self.sidebar_visible = not self.sidebar_visible
 
     def _setup_statusbar(self):
@@ -555,23 +540,24 @@ class MainWindow(QMainWindow):
 
     def add_close_button(self, index):
         close_btn = QPushButton()
-        close_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton))
+        close_btn.setIcon(Icons(Tokens.FG_MUTED).close())
         close_btn.setIconSize(QSize(12, 12))
-        close_btn.setFixedSize(16, 16)
+        close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setAccessibleName("Close tab")
         close_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
                 border: none;
                 border-radius: 4px;
+                padding: 4px;
             }
             QPushButton:hover {
-                background: #3D1525;
+                background: #8A6DCC;
+                border: 1px solid #FF8FA3;
             }
         """)
         close_btn.clicked.connect(lambda checked, i=index: self.close_tab(i))
-        # Use QTabBar.ButtonPosition(1) to explicitly create the 'Right' enum member
-        # This avoids the AttributeError with .Right and the TypeError with raw int
         self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
 
     def show_save_error(self, exception, file_path):
@@ -713,8 +699,14 @@ class MainWindow(QMainWindow):
             current_tab.editor.redo()
 
     def toggle_search_panel(self):
+        if not QGuiApplication.styleHints().animationEnabled():
+            if self.search_panel.maximumHeight() > 0:
+                self.search_panel.setMaximumHeight(0)
+            else:
+                self.search_panel.setMaximumHeight(150)
+            return
+
         if self.search_panel.maximumHeight() > 0:
-            # Animate to hidden
             self.anim = QPropertyAnimation(self.search_panel, b"maximumHeight")
             self.anim.setDuration(200)
             self.anim.setStartValue(self.search_panel.maximumHeight())
@@ -722,7 +714,6 @@ class MainWindow(QMainWindow):
             self.anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
             self.anim.start()
         else:
-            # Animate to visible
             self.anim = QPropertyAnimation(self.search_panel, b"maximumHeight")
             self.anim.setDuration(200)
             self.anim.setStartValue(0)

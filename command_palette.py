@@ -2,75 +2,87 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QAction
+from theme_tokens import Tokens
+from icon_utils import Icons
+
+t = Tokens
 
 class CommandPalette(QDialog):
     actionTriggered = pyqtSignal(str)
 
     def __init__(self, actions, parent=None):
         super().__init__(parent)
-        self.all_actions = actions # Dict {id: description}
-        
-        # Window configuration
+        self.all_actions = actions
+
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setFixedWidth(480)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
-        
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search actions...")
+        self.search_input.setAccessibleName("Search actions")
         self.search_input.textChanged.connect(self.filter_actions)
         self.search_input.returnPressed.connect(self.on_enter_pressed)
+        search_icon = Icons(t.ICON_STROKE).search()
+        self.search_input.addAction(QAction(search_icon, "", self),
+                                    QLineEdit.ActionPosition.LeadingPosition)
         layout.addWidget(self.search_input)
-        
+
         self.action_list = QListWidget()
+        self.action_list.setAccessibleName("Available actions")
         self.action_list.itemDoubleClicked.connect(self.on_action_selected)
         layout.addWidget(self.action_list)
-        
+
         self.update_list("")
-        
-        # Apply styling
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #FFFFFF;
-                border: 1px solid #CBAEEB;
-                border-radius: 14px;
-                font-family: 'Quicksand', 'Segoe UI', sans-serif;
-            }
-            QLineEdit {
+
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {t.BG_PANEL.name()};
+                border: 1px solid {t.ACCENT.name()};
+                border-radius: {t.RADIUS_LG}px;
+            }}
+            QLineEdit {{
                 background-color: transparent;
                 border: none;
                 font-size: 14px;
-                padding: 12px 16px;
-                color: #3C2E56;
-                border-bottom: 1px solid #E1D3F5;
-                font-family: 'Quicksand', 'Segoe UI', sans-serif;
-            }
-            QListWidget {
+                padding: {t.SPACE[3]}px {t.SPACE[4]}px;
+                color: {t.FG_PRIMARY.name()};
+                border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
+                font-family: {t.FONT_UI};
+                min-height: 44px;
+            }}
+            QLineEdit:focus {{
+                background-color: {t.BG_SURFACE.name()};
+            }}
+            QListWidget {{
                 background-color: transparent;
                 border: none;
-                padding: 6px;
+                padding: {t.SPACE[1]}px;
                 outline: 0;
-                font-family: 'Quicksand', 'Segoe UI', sans-serif;
-            }
-            QListWidget::item {
-                padding: 10px 14px;
-                color: #8577A3;
-                font-size: 12px;
-                border-radius: 8px;
-                margin: 2px 2px;
-            }
-            QListWidget::item:selected {
-                background-color: #E4D4F7;
-                color: #3C2E56;
-            }
-            QListWidget::item:hover {
-                background-color: #F1E6FC;
-                color: #3C2E56;
-            }
+                font-family: {t.FONT_UI};
+                font-size: {t.FONT_SIZE_UI}px;
+            }}
+            QListWidget::item {{
+                padding: {t.SPACE[3]}px {t.SPACE[4]}px;
+                color: {t.FG_SECONDARY.name()};
+                font-size: {t.FONT_SIZE_UI}px;
+                border-radius: {t.RADIUS_MD}px;
+                margin: {t.SPACE[1]}px {t.SPACE[1]}px;
+                min-height: 44px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {t.ACCENT_PRESS.name()};
+                color: {t.FG_PRIMARY.name()};
+            }}
+            QListWidget::item:hover {{
+                background-color: {t.BG_SURFACE.name()};
+                color: {t.FG_PRIMARY.name()};
+            }}
         """)
 
     def update_list(self, filter_text):

@@ -1,9 +1,10 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint
-from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor
+from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
+from theme_tokens import Tokens
 
 def detect_language(file_path, content=""):
     if not file_path:
@@ -104,17 +105,16 @@ class CustomEditor(QPlainTextEdit):
         self.language = None
         self.lineNumberArea = LineNumberArea(self)
         self.foldingArea = CodeFoldingArea(self)
-        self.foldable_blocks = {} # start_block: end_block
-        self.folded_blocks = set() # set of start_blocks
-        
+        self.foldable_blocks = {}
+        self.folded_blocks = set()
+
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        
-        # Increase font size slightly to naturally increase line spacing
-        font = self.font()
-        font.setPointSize(font.pointSize() + 2)
+
+        font = QFont(Tokens.FONT_MONO.split(",")[0].strip("'"))
+        font.setPointSize(Tokens.FONT_SIZE_MONO)
         self.setFont(font)
-        
+
         self.textChanged.connect(self.update_foldable_blocks)
         self.cursorPositionChanged.connect(self.highlight_current_line)
         self.update_sidebar_width()
@@ -373,16 +373,15 @@ class EditorTab(QWidget):
         bg_color = Theme.get_color(self.current_theme, "background")
         fg_color = Theme.get_color(self.current_theme, "foreground")
         
-        # Note: CustomEditor is a QPlainTextEdit, so we apply style to it
         self.editor.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: {bg_color.name()};
                 color: {fg_color.name()};
                 border: none;
-                selection-background-color: #3D3660;
-                selection-color: #EDE8FF;
-                font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Monospace';
-                font-size: 12pt;
+                selection-background-color: {Tokens.BG_SURFACE.name()};
+                selection-color: {Tokens.FG_PRIMARY.name()};
+                font-family: {Tokens.FONT_MONO};
+                font-size: {Tokens.FONT_SIZE_MONO}pt;
             }}
         """)
 
