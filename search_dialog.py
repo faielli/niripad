@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
-from PyQt6.QtGui import QColor
 from theme_tokens import Tokens
 from icon_utils import Icons
 from qss_tokens import apply_shadow
@@ -21,6 +20,7 @@ class SearchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("search_panel")
+        self._error_timer = None
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(t.SPACE[2], t.SPACE[2], t.SPACE[2], t.SPACE[2])
@@ -46,15 +46,13 @@ class SearchPanel(QWidget):
         
         self.case_sensitive = QPushButton("Aa")
         self.case_sensitive.setCheckable(True)
-        self.case_sensitive.setFixedSize(44, 44)
+        self.case_sensitive.setFixedSize(40, 28)
         self.case_sensitive.setAccessibleName("Case sensitive")
-        apply_shadow(self.case_sensitive)
         
         self.is_regex = QPushButton(".*")
         self.is_regex.setCheckable(True)
-        self.is_regex.setFixedSize(44, 44)
+        self.is_regex.setFixedSize(40, 28)
         self.is_regex.setAccessibleName("Use regular expression")
-        apply_shadow(self.is_regex)
         
         self.match_count_label = QLabel("0 of 0")
         self.match_count_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -73,25 +71,25 @@ class SearchPanel(QWidget):
         self.find_prev_btn.setIcon(ico.chevron_up())
         self.find_prev_btn.setToolTip("Find Previous (Shift+Enter)")
         self.find_prev_btn.setAccessibleName("Find previous")
-        self.find_prev_btn.setFixedSize(44, 44)
+        self.find_prev_btn.setFixedSize(40, 28)
         
         self.find_next_btn = QPushButton()
         self.find_next_btn.setIcon(ico.chevron_down())
         self.find_next_btn.setToolTip("Find Next (Enter)")
         self.find_next_btn.setAccessibleName("Find next")
-        self.find_next_btn.setFixedSize(44, 44)
+        self.find_next_btn.setFixedSize(40, 28)
         
         self.replace_btn = QPushButton("Replace")
         self.replace_btn.setAccessibleName("Replace")
-        self.replace_btn.setFixedHeight(44)
-        
+        self.replace_btn.setFixedHeight(28)
+
         self.replace_all_btn = QPushButton("Replace All")
         self.replace_all_btn.setAccessibleName("Replace all")
-        self.replace_all_btn.setFixedHeight(44)
+        self.replace_all_btn.setFixedHeight(28)
         
         self.close_btn = QPushButton()
         self.close_btn.setIcon(ico.close())
-        self.close_btn.setFixedSize(44, 44)
+        self.close_btn.setFixedSize(40, 28)
         self.close_btn.setAccessibleName("Close search")
         self.close_btn.setToolTip("Close search (Escape)")
         
@@ -101,65 +99,36 @@ class SearchPanel(QWidget):
         self.replace_all_btn.clicked.connect(self.on_replace_all)
         self.close_btn.clicked.connect(lambda: self.close_requested.emit())
         
-        for btn in (self.find_prev_btn, self.find_next_btn, self.replace_btn,
-                    self.replace_all_btn, self.close_btn):
+        for btn in (self.replace_btn, self.replace_all_btn):
             apply_shadow(btn)
         
         btn_layout.addWidget(self.find_prev_btn)
         btn_layout.addWidget(self.find_next_btn)
         btn_layout.addWidget(self.replace_btn)
         btn_layout.addWidget(self.replace_all_btn)
-        btn_layout.addStretch()
+        btn_layout.addSpacing(t.SPACE[3])
         btn_layout.addWidget(self.close_btn)
         
         layout.addLayout(btn_layout)
         
-        self.setStyleSheet(f"""
-            #search_panel {{
-                border-top: 1px solid {t.BORDER_SUBTLE.name()};
-            }}
-            #search_panel QLineEdit {{
-                background-color: {t.BG_APP.name()};
-                border: 1px solid {t.BORDER_SUBTLE.name()};
-                border-radius: {t.RADIUS_MD}px;
-                color: {t.FG_PRIMARY.name()};
-                padding: {t.SPACE[2]}px {t.SPACE[3]}px;
-                min-height: 44px;
-            }}
-            #search_panel QLineEdit:focus {{
-                border: 1px solid {t.BORDER_FOCUS.name()};
-                background-color: {t.BG_SURFACE.name()};
-            }}
-            #search_panel QPushButton {{
-                background-color: {t.BG_APP.name()};
-                color: {t.FG_SECONDARY.name()};
-                border: 1px solid {t.BORDER_SUBTLE.name()};
-                border-radius: {t.RADIUS_MD}px;
-                padding: {t.SPACE[2]}px {t.SPACE[3]}px;
-                min-height: 44px;
-            }}
-            #search_panel QPushButton:hover {{
-                background-color: {t.BG_SURFACE.name()};
-                border-color: {t.ACCENT.name()};
-                color: {t.ACCENT_HOVER.name()};
-            }}
-            #search_panel QPushButton:pressed {{
-                background-color: {t.ACCENT_PRESS.name()};
-                border-color: {t.ACCENT.name()};
-            }}
-            #search_panel QPushButton:checked {{
-                border-color: {t.ACCENT.name()};
-                color: {t.ACCENT_HOVER.name()};
-                background-color: {t.ACCENT_PRESS.name()};
-            }}
-            #search_panel QLabel {{
-                color: {t.FG_MUTED.name()};
-                font-size: {t.FONT_SIZE_UI - 2}px;
-            }}
-        """)
+        # QSS applied globally from qss_tokens.search_panel_qss()
 
     def set_match_count(self, current, total):
         self.match_count_label.setText(f"{current} of {total}")
+
+    def set_error(self, msg="Bad pattern"):
+        self.match_count_label.setText(msg)
+        self.match_count_label.setStyleSheet(f"color: {t.DANGER.name()};")
+        if self._error_timer is not None:
+            self._error_timer.stop()
+        self._error_timer = QTimer(self)
+        self._error_timer.setSingleShot(True)
+        self._error_timer.timeout.connect(self._reset_match_label)
+        self._error_timer.start(1500)
+
+    def _reset_match_label(self):
+        self._error_timer = None
+        self.match_count_label.setStyleSheet(f"color: {t.FG_MUTED.name()};")
 
     def on_find_next(self):
         self.find_next_requested.emit(

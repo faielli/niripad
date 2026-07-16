@@ -294,7 +294,8 @@ def search_panel_qss() -> str:
     border-radius: {t.RADIUS_MD}px;
     color: {t.FG_SECONDARY.name()};
     padding: {t.SPACE[2]}px {t.SPACE[3]}px;
-    min-height: 44px;
+    min-height: 28px;
+    max-height: 28px;
 }}
 #search_panel QPushButton:hover {{
     background-color: {t.BG_SURFACE.name()};
@@ -309,5 +310,79 @@ def search_panel_qss() -> str:
 #search_panel QLabel {{
     color: {t.FG_MUTED.name()};
     font-size: {t.FONT_SIZE_UI - 2}px;
+}}
+"""
+
+
+def command_palette_qss() -> str:
+    return f"""
+#command_palette {{
+    background-color: {t.BG_PANEL.name()};
+    border: 1px solid {t.ACCENT.name()};
+    border-radius: {t.RADIUS_LG}px;
+}}
+#command_palette QLineEdit {{
+    background-color: transparent;
+    border: none;
+    font-size: 14px;
+    padding: {t.SPACE[3]}px {t.SPACE[4]}px;
+    color: {t.FG_PRIMARY.name()};
+    border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
+    font-family: {t.FONT_UI};
+    min-height: 44px;
+}}
+#command_palette QLineEdit:focus {{
+    background-color: {t.BG_SURFACE.name()};
+}}
+#command_palette QListWidget {{
+    background-color: transparent;
+    border: none;
+    padding: {t.SPACE[1]}px;
+    outline: 0;
+    font-family: {t.FONT_UI};
+    font-size: {t.FONT_SIZE_UI}px;
+}}
+#command_palette QListWidget::item {{
+    padding: {t.SPACE[3]}px {t.SPACE[4]}px;
+    color: {t.FG_SECONDARY.name()};
+    font-size: {t.FONT_SIZE_UI}px;
+    border-radius: {t.RADIUS_MD}px;
+    margin: {t.SPACE[1]}px {t.SPACE[1]}px;
+    min-height: 44px;
+}}
+#command_palette QListWidget::item:selected {{
+    background-color: {t.BG_SURFACE.name()};
+    color: {t.FG_PRIMARY.name()};
+}}
+#command_palette QListWidget::item:hover {{
+    background-color: {t.BG_SURFACE.name()};
+    color: {t.FG_PRIMARY.name()};
+}}
+"""
+
+
+def keybindings_dialog_qss() -> str:
+    return f"""
+#keybindings_dialog QListWidget {{
+    background-color: {t.BG_APP.name()};
+    border: 1px solid {t.BORDER_SUBTLE.name()};
+    border-radius: {t.RADIUS_MD}px;
+    color: {t.FG_PRIMARY.name()};
+    font-size: {t.FONT_SIZE_UI}px;
+    outline: 0;
+    padding: {t.SPACE[1]}px;
+}}
+#keybindings_dialog QListWidget::item {{
+    padding: {t.SPACE[3]}px {t.SPACE[3]}px;
+    border-radius: {t.RADIUS_SM}px;
+    min-height: 44px;
+}}
+#keybindings_dialog QListWidget::item:selected {{
+    background-color: {t.BG_SURFACE.name()};
+    color: {t.FG_PRIMARY.name()};
+}}
+#keybindings_dialog QListWidget::item:hover {{
+    background-color: {t.BG_SURFACE.name()};
+    color: {t.FG_PRIMARY.name()};
 }}
 """

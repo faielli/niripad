@@ -29,6 +29,10 @@ class Tokens:
     SYN_COMMENT = QColor("#9B8FD0")
     SYN_OPER    = QColor("#9D91C4")
 
+    BRACKET_MATCH  = QColor("#A885FF")
+    MARGIN_LINE    = QColor("#3D3660")
+    WHITESPACE_DOT = QColor("#5C5478")
+
     SPACE = [0, 4, 8, 12, 16, 24, 32, 48]
 
     RADIUS_SM = 4

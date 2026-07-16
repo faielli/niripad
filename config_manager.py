@@ -16,7 +16,14 @@ class ConfigManager:
         "font_size": 12,
         "show_line_numbers": True,
         "auto_indent": True,
-        "auto_close_brackets": True
+        "auto_close_brackets": True,
+        "word_wrap": False,
+        "tab_width": 4,
+        "margin_column": 80,
+        "encoding": "UTF-8",
+        "line_ending": "LF",
+        "zoom_level": 100,
+        "recent_files": []
     }
 
     DEFAULT_KEYBINDINGS = {
@@ -118,3 +125,19 @@ class ConfigManager:
 
     def get_binding(self, action):
         return self.keybindings.get(action)
+
+    def add_recent_file(self, path):
+        resolved = str(Path(path).resolve())
+        recent = self.config.get("recent_files", [])
+        if resolved in recent:
+            recent.remove(resolved)
+        recent.insert(0, resolved)
+        self.config["recent_files"] = recent[:10]
+        self.save_config()
+
+    def get_recent_files(self):
+        return self.config.get("recent_files", [])
+
+    def clear_recent_files(self):
+        self.config["recent_files"] = []
+        self.save_config()

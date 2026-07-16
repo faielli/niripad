@@ -17,24 +17,35 @@ class Icons:
         painter.end()
         return QIcon(pixmap)
 
+    def _s(self, pt, size):
+        return int(round(pt * size / 16))
+
     def chevron_left(self, size=16):
         return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(10, 4), QPoint(4, 8), QPoint(10, 12)])
+            QPolygon([QPoint(self._s(10, s), self._s(4, s)),
+                      QPoint(self._s(4, s), self._s(8, s)),
+                      QPoint(self._s(10, s), self._s(12, s))])
         ), size)
 
     def chevron_right(self, size=16):
         return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(4, 4), QPoint(10, 8), QPoint(4, 12)])
+            QPolygon([QPoint(self._s(4, s), self._s(4, s)),
+                      QPoint(self._s(10, s), self._s(8, s)),
+                      QPoint(self._s(4, s), self._s(12, s))])
         ), size)
 
     def chevron_up(self, size=16):
         return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(4, 10), QPoint(8, 4), QPoint(12, 10)])
+            QPolygon([QPoint(self._s(4, s), self._s(10, s)),
+                      QPoint(self._s(8, s), self._s(4, s)),
+                      QPoint(self._s(12, s), self._s(10, s))])
         ), size)
 
     def chevron_down(self, size=16):
         return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(4, 6), QPoint(8, 12), QPoint(12, 6)])
+            QPolygon([QPoint(self._s(4, s), self._s(6, s)),
+                      QPoint(self._s(8, s), self._s(12, s)),
+                      QPoint(self._s(12, s), self._s(6, s))])
         ), size)
 
     def folder(self, size=16):
@@ -55,6 +66,6 @@ class Icons:
 
     def search(self, size=16):
         return self._pix(lambda p, s: (
-            p.drawEllipse(QPointF(5.5, 5.5), 4, 4),
-            p.drawLine(QPoint(9, 9), QPoint(14, 14)),
+            p.drawEllipse(QPointF(self._s(5.5, s), self._s(5.5, s)), self._s(4, s), self._s(4, s)),
+            p.drawLine(QPoint(self._s(9, s), self._s(9, s)), QPoint(self._s(14, s), self._s(14, s))),
         ), size)

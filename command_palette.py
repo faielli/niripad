@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QColor, QAction
+from PyQt6.QtGui import QAction
 from theme_tokens import Tokens
 from icon_utils import Icons
 
@@ -16,6 +16,7 @@ class CommandPalette(QDialog):
         self.all_actions = actions
 
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setObjectName("command_palette")
         self.setFixedWidth(480)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
 
@@ -40,50 +41,7 @@ class CommandPalette(QDialog):
 
         self.update_list("")
 
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {t.BG_PANEL.name()};
-                border: 1px solid {t.ACCENT.name()};
-                border-radius: {t.RADIUS_LG}px;
-            }}
-            QLineEdit {{
-                background-color: transparent;
-                border: none;
-                font-size: 14px;
-                padding: {t.SPACE[3]}px {t.SPACE[4]}px;
-                color: {t.FG_PRIMARY.name()};
-                border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
-                font-family: {t.FONT_UI};
-                min-height: 44px;
-            }}
-            QLineEdit:focus {{
-                background-color: {t.BG_SURFACE.name()};
-            }}
-            QListWidget {{
-                background-color: transparent;
-                border: none;
-                padding: {t.SPACE[1]}px;
-                outline: 0;
-                font-family: {t.FONT_UI};
-                font-size: {t.FONT_SIZE_UI}px;
-            }}
-            QListWidget::item {{
-                padding: {t.SPACE[3]}px {t.SPACE[4]}px;
-                color: {t.FG_SECONDARY.name()};
-                font-size: {t.FONT_SIZE_UI}px;
-                border-radius: {t.RADIUS_MD}px;
-                margin: {t.SPACE[1]}px {t.SPACE[1]}px;
-                min-height: 44px;
-            }}
-            QListWidget::item:selected {{
-                background-color: {t.ACCENT_PRESS.name()};
-                color: {t.FG_PRIMARY.name()};
-            }}
-            QListWidget::item:hover {{
-                background-color: {t.BG_SURFACE.name()};
-                color: {t.FG_PRIMARY.name()};
-            }}
-        """)
+        # QSS applied globally from qss_tokens.command_palette_qss()
 
     def update_list(self, filter_text):
         self.action_list.clear()
@@ -124,8 +82,9 @@ class CommandPalette(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        if self.parentWidget():
-            parent_geo = self.parentWidget().geometry()
+        parent = self.parent()
+        if parent and parent.isWidgetType():
+            parent_geo = parent.geometry()
             self.move(
                 parent_geo.center().x() - self.width() // 2,
                 (parent_geo.height() // 3) - (self.height() // 2)

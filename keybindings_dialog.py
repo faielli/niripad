@@ -13,6 +13,7 @@ class KeybindingsDialog(QDialog):
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
         self.config_manager = config_manager
+        self.setObjectName("keybindings_dialog")
         self.setWindowTitle("Keybindings Configuration")
         self.setMinimumWidth(420)
         self.setMinimumHeight(400)
@@ -43,40 +44,7 @@ class KeybindingsDialog(QDialog):
         btn_layout.addWidget(self.cancel_btn)
         self.layout.addLayout(btn_layout)
 
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {t.BG_PANEL.name()};
-                color: {t.FG_PRIMARY.name()};
-                font-family: {t.FONT_UI};
-            }}
-            QLabel {{
-                color: {t.FG_SECONDARY.name()};
-                font-size: {t.FONT_SIZE_UI}px;
-                margin-bottom: {t.SPACE[2]}px;
-            }}
-            QListWidget {{
-                background-color: {t.BG_APP.name()};
-                border: 1px solid {t.BORDER_SUBTLE.name()};
-                border-radius: {t.RADIUS_MD}px;
-                color: {t.FG_PRIMARY.name()};
-                font-size: {t.FONT_SIZE_UI}px;
-                outline: 0;
-                padding: {t.SPACE[1]}px;
-            }}
-            QListWidget::item {{
-                padding: {t.SPACE[3]}px {t.SPACE[3]}px;
-                border-radius: {t.RADIUS_SM}px;
-                min-height: 44px;
-            }}
-            QListWidget::item:selected {{
-                background-color: {t.ACCENT_PRESS.name()};
-                color: {t.FG_PRIMARY.name()};
-            }}
-            QListWidget::item:hover {{
-                background-color: {t.BG_SURFACE.name()};
-                color: {t.FG_PRIMARY.name()};
-            }}
-        """)
+        # QSS applied globally from qss_tokens.keybindings_dialog_qss()
 
         self.load_bindings_into_list()
 

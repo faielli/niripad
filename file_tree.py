@@ -4,6 +4,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtCore import pyqtSignal, Qt
+from icon_utils import Icons
+from theme_tokens import Tokens
 import os
 import shutil
 
@@ -104,7 +106,7 @@ class FileTree(QWidget):
         parent_path = os.path.dirname(path)
         if parent_path != path:
             parent_item = QTreeWidgetItem(self.tree, [".."])
-            parent_item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogToParent))
+            parent_item.setIcon(0, Icons(Tokens.ICON_STROKE).folder())
             font = parent_item.font(0)
             font.setItalic(True)
             parent_item.setFont(0, font)

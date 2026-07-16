@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint
-from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont
+from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont, QTextOption
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
 from theme_tokens import Tokens
@@ -99,12 +99,24 @@ class LineNumberArea(QWidget):
     def paintEvent(self, event):
         self.editor.lineNumberAreaPaintEvent(event)
 
+
+class MarginLine(QWidget):
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(event.rect(), QColor(Tokens.MARGIN_LINE.name()))
+        painter.end()
+
 class CustomEditor(QPlainTextEdit):
     def __init__(self):
         super().__init__()
         self.language = None
         self.lineNumberArea = LineNumberArea(self)
         self.foldingArea = CodeFoldingArea(self)
+        self.marginLine = MarginLine(self)
         self.foldable_blocks = {}
         self.folded_blocks = set()
 
@@ -116,32 +128,154 @@ class CustomEditor(QPlainTextEdit):
         self.setFont(font)
 
         self.textChanged.connect(self.update_foldable_blocks)
-        self.cursorPositionChanged.connect(self.highlight_current_line)
+        self.cursorPositionChanged.connect(self._on_cursor_moved)
+        self._search_highlights = []
+        self._bracket_highlights = []
+        self._zoom_level = 100
+        self._show_whitespace = False
+        self._margin_column = 80
+        self._show_margin = True
+
         self.update_sidebar_width()
         self.update_foldable_blocks()
         self.highlight_current_line()
+
+    def _on_cursor_moved(self):
+        self.highlight_current_line()
+        self._update_bracket_match()
 
     def highlight_current_line(self):
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
-        line_color = QColor("#332E50")
-        line_color.setAlpha(200)
+        line_color = QColor("#A885FF")
+        line_color.setAlpha(120)
         selection.format.setBackground(line_color)
         selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
         selection.cursor = self.textCursor()
         selection.cursor.clearSelection()
         
         extra_selections.append(selection)
+        extra_selections.extend(self._search_highlights)
+        extra_selections.extend(self._bracket_highlights)
         self.setExtraSelections(extra_selections)
+
+    def set_search_highlights(self, selections):
+        self._search_highlights = selections
+        self.highlight_current_line()
+
+    def clear_search_highlights(self):
+        self._search_highlights = []
+        self.highlight_current_line()
+
+    def _update_bracket_match(self):
+        self._bracket_highlights = []
+        cursor = self.textCursor()
+        pos = cursor.position()
+        doc = self.document()
+        text = doc.toPlainText()
+        if not text or pos < 0 or pos > len(text):
+            self.highlight_current_line()
+            return
+
+        char = text[pos - 1] if pos > 0 else ''
+        pairs = {'(': ')', '[': ']', '{': '}'}
+        match = None
+
+        if char in pairs:
+            match = self._find_matching(text, pos - 1, pairs[char], 1)
+        elif char in pairs.values():
+            open_for = {v: k for k, v in pairs.items()}[char]
+            match = self._find_matching(text, pos - 1, open_for, -1)
+        elif pos < len(text):
+            char = text[pos]
+            if char in pairs:
+                match = self._find_matching(text, pos, pairs[char], 1)
+            elif char in pairs.values():
+                open_for = {v: k for k, v in pairs.items()}[char]
+                match = self._find_matching(text, pos, open_for, -1)
+
+        if match is not None:
+            sels = []
+            for mpos in (pos - 1 if char in pairs or char in pairs.values() else pos, match):
+                if 0 <= mpos < len(text):
+                    sel = QTextEdit.ExtraSelection()
+                    color = QColor(Tokens.BRACKET_MATCH.name())
+                    color.setAlpha(80)
+                    sel.format.setBackground(color)
+                    sel.cursor = QTextCursor(doc)
+                    sel.cursor.setPosition(mpos)
+                    sel.cursor.setPosition(mpos + 1, QTextCursor.MoveMode.KeepAnchor)
+                    sels.append(sel)
+            self._bracket_highlights = sels
+
+        self.highlight_current_line()
+
+    def _find_matching(self, text, start, target, direction):
+        depth = 0
+        pos = start + direction
+        open_char = text[start]
+        close_char = target
+        while 0 <= pos < len(text):
+            if text[pos] == open_char:
+                depth += 1
+            elif text[pos] == close_char:
+                if depth == 0:
+                    return pos
+                depth -= 1
+            pos += direction
+        return None
+
+    def set_word_wrap(self, enabled):
+        mode = QPlainTextEdit.LineWrapMode.WidgetWidth if enabled else QPlainTextEdit.LineWrapMode.NoWrap
+        self.setLineWrapMode(mode)
+        self.update_sidebar_width()
+
+    def set_show_whitespace(self, enabled):
+        self._show_whitespace = enabled
+        opt = self.document().defaultTextOption()
+        if enabled:
+            opt.setFlags(opt.flags() | QTextOption.Flag.ShowTabsAndSpaces | QTextOption.Flag.ShowLineAndParagraphSeparators)
+        else:
+            opt.setFlags(opt.flags() & ~(QTextOption.Flag.ShowTabsAndSpaces | QTextOption.Flag.ShowLineAndParagraphSeparators))
+        self.document().setDefaultTextOption(opt)
+        self.viewport().update()
+
+    def set_margin_column(self, column):
+        self._margin_column = column
+        self.update_sidebar_area()
+
+    def set_show_margin(self, enabled):
+        self._show_margin = enabled
+        self.marginLine.setVisible(enabled)
+
+    def set_zoom_level(self, level):
+        self._zoom_level = max(50, min(200, level))
+        font = self.font()
+        base = Tokens.FONT_SIZE_MONO
+        font.setPointSize(int(base * self._zoom_level / 100))
+        self.setFont(font)
+        self.update_sidebar_width()
+
+    def zoom_in(self):
+        self.set_zoom_level(self._zoom_level + 10)
+
+    def zoom_out(self):
+        self.set_zoom_level(self._zoom_level - 10)
+
+    def reset_zoom(self):
+        self.set_zoom_level(100)
 
     def go_to_line(self, line_number):
         # line_number is 1-indexed
-        block = self.document().findBlockByLineNumber(line_number - 1)
+        block = self.document().findBlockByNumber(line_number - 1)
         if block.isValid():
             cursor = QTextCursor(block)
+            cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
             self.setTextCursor(cursor)
             self.ensureCursorVisible()
+            self.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.highlight_current_line()
 
     def line_number_width(self):
         digits = 1
@@ -170,6 +304,14 @@ class CustomEditor(QPlainTextEdit):
         
         self.lineNumberArea.setGeometry(QRect(0, 0, ln_width, self.height()))
         self.foldingArea.setGeometry(QRect(ln_width, 0, fold_width, self.height()))
+
+        if self._show_margin:
+            metrics = QFontMetrics(self.font())
+            margin_x = ln_width + fold_width + metrics.horizontalAdvance('9') * self._margin_column
+            self.marginLine.setGeometry(QRect(margin_x, 0, 2, self.height()))
+            self.marginLine.show()
+        else:
+            self.marginLine.hide()
 
     def update_foldable_blocks(self):
         self.foldable_blocks = {}
@@ -232,6 +374,10 @@ class CustomEditor(QPlainTextEdit):
             
             self.update_sidebar_area() # Refresh triangles
             self.viewport().update()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.highlight_current_line()
 
     def keyPressEvent(self, event):
         # Auto-closure map
@@ -305,6 +451,7 @@ class CustomEditor(QPlainTextEdit):
         if rect.contains(QRect(0, 0, sidebar_width, self.height())):
             self.lineNumberArea.update()
             self.foldingArea.update()
+        self.marginLine.update()
 
     def lineNumberAreaPaintEvent(self, event):
         painter = QPainter(self.lineNumberArea)
@@ -389,22 +536,26 @@ class EditorTab(QWidget):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            self.editor.blockSignals(True)
-            self.editor.setPlainText(content)
-            self.editor.blockSignals(False)
-            self.file_path = file_path
-            self._is_modified = False
-            
-            lang = detect_language(file_path, content)
-            print(f"[DEBUG] Detected language: {lang}")
-            self._language = lang
-            if lang:
-                self.highlighter.set_language(lang)
-                self.highlighter.rehighlight()
-                self.editor.language = lang
-                
         except Exception as e:
             print(f"Error loading file {file_path}: {e}")
+            return
+
+        self.editor.blockSignals(True)
+        try:
+            self.editor.setPlainText(content)
+        finally:
+            self.editor.blockSignals(False)
+
+        self.file_path = file_path
+        self._is_modified = False
+
+        lang = detect_language(file_path, content)
+        print(f"[DEBUG] Detected language: {lang}")
+        self._language = lang
+        if lang:
+            self.highlighter.set_language(lang)
+            self.highlighter.rehighlight()
+            self.editor.language = lang
 
     @property
     def language(self):

@@ -8,7 +8,6 @@ class UniversalHighlighter(QSyntaxHighlighter):
         self.theme = theme_dict
         self.rules = []
         self.current_language = None
-        self.in_code_block = False
 
     def set_language(self, language):
         self.current_language = language
@@ -154,13 +153,16 @@ class UniversalHighlighter(QSyntaxHighlighter):
         # Handle Markdown Fenced Code Blocks
         if self.current_language == "markdown":
             if text.strip().startswith("```"):
-                self.in_code_block = not self.in_code_block
+                self.setCurrentBlockState(0 if self.previousBlockState() == 1 else 1)
                 self.setFormat(0, len(text), self._create_format(Theme.get_color(self.theme, "code")))
                 return
 
-        if self.in_code_block:
-            self.setFormat(0, len(text), self._create_format(Theme.get_color(self.theme, "code")))
-            return
+            if self.previousBlockState() == 1:
+                self.setCurrentBlockState(1)
+                self.setFormat(0, len(text), self._create_format(Theme.get_color(self.theme, "code")))
+                return
+
+            self.setCurrentBlockState(0)
 
         for pattern, fmt in self.rules:
             for match in pattern.finditer(text):
