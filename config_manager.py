@@ -1,5 +1,7 @@
+import copy
 import json
 import os
+import tempfile
 from pathlib import Path
 
 class ConfigManager:
@@ -11,7 +13,7 @@ class ConfigManager:
 
 
     DEFAULT_CONFIG = {
-        "theme": "nord",
+        "theme": "lilac",
         "font_family": "Consolas",
         "font_size": 12,
         "show_line_numbers": True,
@@ -51,6 +53,20 @@ class ConfigManager:
         if not self.CONFIG_DIR.exists():
             self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
+    def _atomic_write_json(self, target, data):
+        self._ensure_config_dir()
+        fd, tmp_path = tempfile.mkstemp(dir=self.CONFIG_DIR, suffix=".tmp")
+        try:
+            with os.fdopen(fd, 'w') as f:
+                json.dump(data, f, indent=4)
+            os.replace(tmp_path, target)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
+
     def load_config(self):
         if self.CONFIG_FILE.exists():
             try:
@@ -58,21 +74,41 @@ class ConfigManager:
                     self.config = json.load(f)
             except Exception as e:
                 print(f"Error loading config: {e}")
-                self.config = self.DEFAULT_CONFIG.copy()
+                backup = self.CONFIG_FILE.with_suffix(".json.bad")
+                try:
+                    self.CONFIG_FILE.rename(backup)
+                    print(f"Backed up corrupt config to {backup}")
+                except Exception:
+                    pass
+                self.config = {}
         else:
-            self.config = self.DEFAULT_CONFIG.copy()
-            self.save_config()
+            self.config = {}
+
+        merged = copy.deepcopy(self.DEFAULT_CONFIG)
+        if isinstance(self.config, dict):
+            merged.update({k: v for k, v in self.config.items() if k in merged})
+        self.config = merged
+
+        self._validate_config()
+
+    def _validate_config(self):
+        if not isinstance(self.config.get("tab_width"), int) or self.config["tab_width"] < 1 or self.config["tab_width"] > 16:
+            self.config["tab_width"] = self.DEFAULT_CONFIG["tab_width"]
+        if not isinstance(self.config.get("font_size"), int) or self.config["font_size"] < 6 or self.config["font_size"] > 72:
+            self.config["font_size"] = self.DEFAULT_CONFIG["font_size"]
+        if not isinstance(self.config.get("margin_column"), int) or self.config["margin_column"] < 20 or self.config["margin_column"] > 200:
+            self.config["margin_column"] = self.DEFAULT_CONFIG["margin_column"]
+        if not isinstance(self.config.get("zoom_level"), int) or self.config["zoom_level"] < 50 or self.config["zoom_level"] > 200:
+            self.config["zoom_level"] = self.DEFAULT_CONFIG["zoom_level"]
 
     def save_config(self):
         try:
-            with open(self.CONFIG_FILE, 'w') as f:
-                json.dump(self.config, f, indent=4)
+            self._atomic_write_json(str(self.CONFIG_FILE), self.config)
         except Exception as e:
             print(f"Error saving config: {e}")
 
     def load_keybindings(self):
-        # Start with defaults
-        self.keybindings = self.DEFAULT_KEYBINDINGS.copy()
+        self.keybindings = copy.deepcopy(self.DEFAULT_KEYBINDINGS)
         
         if self.KEYBINDINGS_FILE.exists():
             try:
@@ -84,13 +120,17 @@ class ConfigManager:
                 print(f"Error loading keybindings: {e}")
 
         else:
-            self.keybindings = self.DEFAULT_KEYBINDINGS.copy()
+            self.keybindings = copy.deepcopy(self.DEFAULT_KEYBINDINGS)
             self.save_keybindings()
 
     def save_keybindings(self):
+        seen = {}
+        for action, shortcut in self.keybindings.items():
+            if shortcut in seen:
+                print(f"Warning: duplicate shortcut '{shortcut}' for '{action}' and '{seen[shortcut]}'")
+            seen[shortcut] = action
         try:
-            with open(self.KEYBINDINGS_FILE, 'w') as f:
-                json.dump(self.keybindings, f, indent=4)
+            self._atomic_write_json(str(self.KEYBINDINGS_FILE), self.keybindings)
         except Exception as e:
             print(f"Error saving keybindings: {e}")
 
@@ -98,16 +138,21 @@ class ConfigManager:
         if self.SESSION_FILE.exists():
             try:
                 with open(self.SESSION_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
             except Exception as e:
                 print(f"Error loading session: {e}")
-        return None
+                backup = self.SESSION_FILE.with_suffix(".session.bad")
+                try:
+                    self.SESSION_FILE.rename(backup)
+                    print(f"Backed up corrupt session to {backup}")
+                except Exception:
+                    pass
+        return {}
 
     def save_session(self, session_data):
         try:
-            self._ensure_config_dir()
-            with open(self.SESSION_FILE, 'w') as f:
-                json.dump(session_data, f, indent=4)
+            self._atomic_write_json(str(self.SESSION_FILE), session_data)
         except Exception as e:
             print(f"Error saving session: {e}")
 
@@ -116,8 +161,12 @@ class ConfigManager:
         return self.CACHE_DIR
 
     def get(self, key, default=None):
-
-        return self.config.get(key, default)
+        val = self.config.get(key)
+        if val is not None:
+            return val
+        if key in self.DEFAULT_CONFIG:
+            return self.DEFAULT_CONFIG[key]
+        return default
 
     def set(self, key, value):
         self.config[key] = value
@@ -127,8 +176,13 @@ class ConfigManager:
         return self.keybindings.get(action)
 
     def add_recent_file(self, path):
-        resolved = str(Path(path).resolve())
-        recent = self.config.get("recent_files", [])
+        try:
+            resolved = str(Path(path).resolve(strict=False))
+        except Exception:
+            return
+        recent = self.config.get("recent_files")
+        if not isinstance(recent, list):
+            recent = []
         if resolved in recent:
             recent.remove(resolved)
         recent.insert(0, resolved)

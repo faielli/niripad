@@ -1,54 +1,13 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QMenu, QMessageBox, QInputDialog, QFileDialog, QStyle
+    QMenu, QMessageBox, QInputDialog, QFileDialog
 )
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor
 from PyQt6.QtCore import pyqtSignal, Qt
 from icon_utils import Icons
 from theme_tokens import Tokens
 import os
 import shutil
-
-FILETREE_QSS = """
-QTreeWidget {
-    background: transparent;
-    border: none;
-    outline: none;
-    font-family: 'Quicksand', 'Segoe UI', sans-serif;
-    font-size: 13px;
-    color: #C8BFE8;
-}
-QTreeWidget::item {
-    padding: 4px 8px;
-    min-height: 44px;
-    color: #C8BFE8;
-    border-radius: 4px;
-}
-QTreeWidget::item:hover {
-    background-color: #2A2440;
-    color: #EDE8FF;
-}
-QTreeWidget::item:selected {
-    background-color: #332E50;
-    color: #EDE8FF;
-}
-QTreeView::branch {
-    background: transparent;
-}
-QScrollBar:vertical {
-    background: transparent;
-    width: 8px;
-}
-QScrollBar::handle:vertical {
-    background: #5A4E8A;
-    border-radius: 4px;
-    min-height: 20px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #A885FF;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-"""
 
 class FileTree(QWidget):
     fileOpened = pyqtSignal(str)
@@ -62,12 +21,11 @@ class FileTree(QWidget):
         self.layout.setSpacing(0)
 
         # File Tree
-        self.current_root = os.path.abspath(initial_path or os.getcwd())
+        self.current_root = os.path.realpath(initial_path or os.getcwd())
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(20)
         self.tree.setRootIsDecorated(True)
-        self.tree.setStyleSheet(FILETREE_QSS)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.tree.itemClicked.connect(self._on_item_clicked)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -79,14 +37,16 @@ class FileTree(QWidget):
         # Initialize population
         self._populate(self.current_root)
 
-    def _colored_icon(self, icon_type, color):
-        icon = self.style().standardIcon(icon_type)
-        pixmap = icon.pixmap(16, 16)
-        mask = pixmap.mask()
-        result = QPixmap(pixmap.size())
-        result.fill(QColor(color))
-        result.setMask(mask)
-        return QIcon(result)
+    def _file_icon(self, filename):
+        ext = os.path.splitext(filename)[1].lower()
+        ico = Icons(Tokens.ICON_STROKE)
+        if ext in ('.py', '.pyw'):
+            return ico.file_code()
+        if ext in ('.js', '.ts', '.jsx', '.tsx'):
+            return ico.file_code()
+        if ext in ('.c', '.cpp', '.h', '.hpp', '.rs', '.go'):
+            return ico.file_code()
+        return ico.file()
 
     def on_browse_folder(self):
         new_path = QFileDialog.getExistingDirectory(self, "Select Root Folder", self.current_root)
@@ -94,9 +54,9 @@ class FileTree(QWidget):
             self.set_root_path(new_path)
 
     def set_root_path(self, path):
-        abs_path = os.path.abspath(path)
-        if os.path.exists(abs_path) and os.path.isdir(abs_path):
-            self.current_root = abs_path
+        real_path = os.path.realpath(path)
+        if os.path.exists(real_path) and os.path.isdir(real_path):
+            self.current_root = real_path
             self._populate(self.current_root)
 
     def _populate(self, path):
@@ -116,18 +76,25 @@ class FileTree(QWidget):
         # 2. Immediate contents only
         self._add_items(self.tree, path)
 
-    def _add_items(self, parent_item, path):
+    def _add_items(self, parent_item, path, _visited=None):
         try:
             entries = os.listdir(path)
         except PermissionError:
             return
-        
-        # Separate and sort
+
+        if _visited is None:
+            _visited = set()
+        real_path = os.path.realpath(path)
+        _visited.add(real_path)
+
         dirs = []
         files = []
         for entry in entries:
             full_path = os.path.join(path, entry)
             if os.path.isdir(full_path):
+                real = os.path.realpath(full_path)
+                if os.path.islink(full_path) and real in _visited:
+                    continue
                 dirs.append(entry)
             else:
                 files.append(entry)
@@ -136,21 +103,34 @@ class FileTree(QWidget):
         files.sort(key=str.lower)
         
         # Add directories - lazy population, collapsible
+        dir_items = []
+        ico = Icons(Tokens.ICON_STROKE)
         for d in dirs:
             full_path = os.path.join(path, d)
-            item = QTreeWidgetItem(parent_item, [d])
-            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirClosedIcon, "#9B6DFF"))
+            item = QTreeWidgetItem([d])
+            item.setIcon(0, ico.folder())
             item.setData(0, Qt.ItemDataRole.UserRole, full_path)
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
-            item.setData(0, Qt.ItemDataRole.UserRole + 1, False)  # not yet populated
-            QTreeWidgetItem(item, ["..."])  # placeholder to show expand arrow
+            item.setData(0, Qt.ItemDataRole.UserRole + 1, False)
+            QTreeWidgetItem(item, ["..."])
+            dir_items.append(item)
+        self._add_batch(parent_item, dir_items)
             
         # Add files
+        file_items = []
         for f in files:
             full_path = os.path.join(path, f)
-            item = QTreeWidgetItem(parent_item, [f])
-            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_FileIcon, "#5C5478"))
+            item = QTreeWidgetItem([f])
+            item.setIcon(0, self._file_icon(f))
             item.setData(0, Qt.ItemDataRole.UserRole, full_path)
+            file_items.append(item)
+        self._add_batch(parent_item, file_items)
+
+    def _add_batch(self, parent, items):
+        if isinstance(parent, QTreeWidget):
+            parent.addTopLevelItems(items)
+        else:
+            parent.addChildren(items)
 
     def _on_item_clicked(self, item, column):
         path = item.data(0, Qt.ItemDataRole.UserRole)
@@ -166,7 +146,7 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirOpenIcon, "#9B6DFF"))
+            item.setIcon(0, Icons(Tokens.ICON_STROKE).folder_open())
             
             populated = item.data(0, Qt.ItemDataRole.UserRole + 1)
             if not populated:
@@ -181,18 +161,26 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, self._colored_icon(QStyle.StandardPixmap.SP_DirClosedIcon, "#9B6DFF"))
+            item.setIcon(0, Icons(Tokens.ICON_STROKE).folder())
+            item.setData(0, Qt.ItemDataRole.UserRole + 1, False)
+            while item.childCount() > 0:
+                item.removeChild(item.child(0))
+            QTreeWidgetItem(item, ["..."])
 
     def _on_item_double_clicked(self, item, column):
         path = item.data(0, Qt.ItemDataRole.UserRole)
+        if not path:
+            return
         
         if path == "PARENT":
             self.set_root_path(os.path.dirname(self.current_root))
         elif os.path.isdir(path):
-            # Let the single-click expand, double-click could also open in a new root if desired
-            # but requested behavior is just double-click open file
             pass
         else:
+            resolved = os.path.realpath(path)
+            if not resolved.startswith(os.path.realpath(self.current_root) + os.sep) and resolved != os.path.realpath(self.current_root):
+                QMessageBox.warning(self, "Security", "Cannot open file outside workspace root.")
+                return
             self.fileOpened.emit(path)
 
     def on_custom_context_menu(self, position):
@@ -210,7 +198,7 @@ class FileTree(QWidget):
 
         if item:
             path = item.data(0, Qt.ItemDataRole.UserRole)
-            if path != "PARENT":
+            if path and path != "PARENT":
                 open_action = menu.addAction("Open")
                 rename_action = menu.addAction("Rename")
                 delete_action = menu.addAction("Delete")
@@ -253,20 +241,41 @@ class FileTree(QWidget):
         current_name = os.path.basename(old_path)
         new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=current_name)
         if ok and new_name and new_name != current_name:
+            new_name = os.path.basename(new_name)
+            if not new_name:
+                return
             new_path = os.path.join(os.path.dirname(old_path), new_name)
+            if os.path.exists(new_path):
+                res = QMessageBox.question(
+                    self, "Overwrite?",
+                    f"{new_name} already exists. Overwrite?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if res != QMessageBox.StandardButton.Yes:
+                    return
             try:
-                os.rename(old_path, new_path)
+                shutil.move(old_path, new_path)
                 self._populate(self.current_root)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not rename: {e}")
 
     def _delete_item(self, item, path):
         name = os.path.basename(path)
-        res = QMessageBox.question(self, "Delete", f"Are you sure you want to delete {name}?", 
+        msg = f"Are you sure you want to delete {name}?"
+        if os.path.isdir(path):
+            try:
+                entries = os.listdir(path)
+                if entries:
+                    msg += f"\n\nThis folder is not empty ({len(entries)} items)."
+            except PermissionError:
+                pass
+        res = QMessageBox.question(self, "Delete", msg,
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if res == QMessageBox.StandardButton.Yes:
             try:
-                if os.path.isdir(path):
+                if os.path.islink(path):
+                    os.remove(path)
+                elif os.path.isdir(path):
                     shutil.rmtree(path)
                 else:
                     os.remove(path)

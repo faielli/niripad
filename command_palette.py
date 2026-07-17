@@ -5,6 +5,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QAction
 from theme_tokens import Tokens
 from icon_utils import Icons
+from qss_tokens import apply_shadow
 
 t = Tokens
 
@@ -15,16 +16,20 @@ class CommandPalette(QDialog):
         super().__init__(parent)
         self.all_actions = actions
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Popup)
         self.setObjectName("command_palette")
         self.setFixedWidth(480)
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        apply_shadow(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         self.search_input = QLineEdit()
+        self.search_input.setObjectName("command_search_input")
         self.search_input.setPlaceholderText("Search actions...")
         self.search_input.setAccessibleName("Search actions")
         self.search_input.textChanged.connect(self.filter_actions)
@@ -35,13 +40,12 @@ class CommandPalette(QDialog):
         layout.addWidget(self.search_input)
 
         self.action_list = QListWidget()
+        self.action_list.setObjectName("command_action_list")
         self.action_list.setAccessibleName("Available actions")
         self.action_list.itemDoubleClicked.connect(self.on_action_selected)
         layout.addWidget(self.action_list)
 
         self.update_list("")
-
-        # QSS applied globally from qss_tokens.command_palette_qss()
 
     def update_list(self, filter_text):
         self.action_list.clear()
@@ -71,23 +75,34 @@ class CommandPalette(QDialog):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.reject()
-        elif event.key() == Qt.Key.Key_Down:
+        elif event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
             if self.action_list.count() > 0:
-                self.action_list.setCurrentRow((self.action_list.currentRow() + 1) % self.action_list.count())
-        elif event.key() == Qt.Key.Key_Up:
-            if self.action_list.count() > 0:
-                self.action_list.setCurrentRow((self.action_list.currentRow() - 1) % self.action_list.count())
+                cur = self.action_list.currentRow()
+                delta = 1 if event.key() == Qt.Key.Key_Down else -1
+                self.action_list.setCurrentRow((cur + delta) % self.action_list.count())
+        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.on_enter_pressed()
         else:
             super().keyPressEvent(event)
 
     def showEvent(self, event):
         super().showEvent(event)
+        self.adjustSize()
         parent = self.parent()
-        if parent and parent.isWidgetType():
+        if parent and parent.isWidgetType() and parent.isVisible():
             parent_geo = parent.geometry()
-            self.move(
-                parent_geo.center().x() - self.width() // 2,
-                (parent_geo.height() // 3) - (self.height() // 2)
-            )
+            x = parent_geo.center().x() - self.width() // 2
+            y = (parent_geo.height() // 3) - (self.height() // 2)
+            y = max(parent_geo.top() + 20, y)
+            self.move(x, y)
+        else:
+            from PyQt6.QtGui import QGuiApplication
+            screen = QGuiApplication.primaryScreen()
+            if screen:
+                sg = screen.availableGeometry()
+                x = sg.center().x() - self.width() // 2
+                y = sg.height() // 3 - self.height() // 2
+                y = max(sg.top() + 20, y)
+                self.move(x, y)
 
 

@@ -1,15 +1,18 @@
 import sys
 import os
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 from main_window import MainWindow
-from qss_tokens import qss, search_panel_qss, command_palette_qss, keybindings_dialog_qss
+from qss_tokens import global_qss
 
 
 def main():
-    os.environ["QT_QPA_PLATFORM"] = "wayland;xcb"
+    if "QT_QPA_PLATFORM" not in os.environ and sys.platform.startswith("linux"):
+        os.environ["QT_QPA_PLATFORM"] = "wayland;xcb"
 
     app = QApplication(sys.argv)
-    app.setStyleSheet(qss() + search_panel_qss() + command_palette_qss() + keybindings_dialog_qss())
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
+    app.setStyleSheet(global_qss())
 
     window = MainWindow()
     window.show()

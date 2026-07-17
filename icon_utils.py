@@ -1,71 +1,102 @@
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QPolygon
-from PyQt6.QtCore import Qt, QPoint, QPointF
+from PyQt6.QtGui import QIcon, QColor
+
+try:
+    import qtawesome as qta
+    QTA_AVAILABLE = True
+except ImportError:
+    qta = None
+    QTA_AVAILABLE = False
+
+from theme_tokens import Tokens
+
+ICON_DEFAULT = Tokens.FG_SECONDARY.name()
+ICON_HOVER = Tokens.ACCENT.name()
+ICON_ACTIVE = Tokens.ACCENT_HOVER.name()
+
+
+def get_icon(name, color=ICON_DEFAULT, size=14):
+    if QTA_AVAILABLE and qta:
+        return qta.icon(name, color=color)
+    return QIcon()
 
 
 class Icons:
-    def __init__(self, color: QColor):
-        self._c = color
+    _cache = {}
 
-    def _pix(self, draw_func, size=16):
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(self._c, 2, Qt.PenStyle.SolidLine,
-                            Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        draw_func(painter, size)
-        painter.end()
-        return QIcon(pixmap)
+    def __init__(self, color: QColor = None):
+        self._c = color or Tokens.FG_SECONDARY
 
-    def _s(self, pt, size):
-        return int(round(pt * size / 16))
+    def _qta(self, name, size=14):
+        return get_icon(name, self._c.name(), size)
 
-    def chevron_left(self, size=16):
-        return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(self._s(10, s), self._s(4, s)),
-                      QPoint(self._s(4, s), self._s(8, s)),
-                      QPoint(self._s(10, s), self._s(12, s))])
-        ), size)
+    def chevron_left(self, size=14):
+        return self._qta("fa5s.chevron-left", size)
 
-    def chevron_right(self, size=16):
-        return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(self._s(4, s), self._s(4, s)),
-                      QPoint(self._s(10, s), self._s(8, s)),
-                      QPoint(self._s(4, s), self._s(12, s))])
-        ), size)
+    def chevron_right(self, size=14):
+        return self._qta("fa5s.chevron-right", size)
 
-    def chevron_up(self, size=16):
-        return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(self._s(4, s), self._s(10, s)),
-                      QPoint(self._s(8, s), self._s(4, s)),
-                      QPoint(self._s(12, s), self._s(10, s))])
-        ), size)
+    def chevron_up(self, size=14):
+        return self._qta("fa5s.chevron-up", size)
 
-    def chevron_down(self, size=16):
-        return self._pix(lambda p, s: p.drawPolyline(
-            QPolygon([QPoint(self._s(4, s), self._s(6, s)),
-                      QPoint(self._s(8, s), self._s(12, s)),
-                      QPoint(self._s(12, s), self._s(6, s))])
-        ), size)
+    def chevron_down(self, size=14):
+        return self._qta("fa5s.chevron-down", size)
 
-    def folder(self, size=16):
-        return self._pix(lambda p, s: (
-            p.drawLine(QPoint(2, 12), QPoint(2, 6)),
-            p.drawLine(QPoint(2, 6), QPoint(5, 3)),
-            p.drawLine(QPoint(5, 3), QPoint(s - 2, 3)),
-            p.drawLine(QPoint(s - 2, 3), QPoint(s - 2, s - 3)),
-            p.drawLine(QPoint(s - 2, s - 3), QPoint(2, s - 3)),
-        ), size)
+    def folder(self, size=14):
+        return self._qta("fa5s.folder", size)
+
+    def folder_open(self, size=14):
+        return self._qta("fa5s.folder-open", size)
 
     def close(self, size=12):
-        m = 2
-        return self._pix(lambda p, s: (
-            p.drawLine(QPoint(m, m), QPoint(s - m, s - m)),
-            p.drawLine(QPoint(s - m, m), QPoint(m, s - m)),
-        ), size)
+        return self._qta("fa5s.times", size)
 
-    def search(self, size=16):
-        return self._pix(lambda p, s: (
-            p.drawEllipse(QPointF(self._s(5.5, s), self._s(5.5, s)), self._s(4, s), self._s(4, s)),
-            p.drawLine(QPoint(self._s(9, s), self._s(9, s)), QPoint(self._s(14, s), self._s(14, s))),
-        ), size)
+    def search(self, size=14):
+        return self._qta("fa5s.search", size)
+
+    def bars(self, size=14):
+        return self._qta("fa5s.bars", size)
+
+    def file(self, size=14):
+        return self._qta("fa5s.file", size)
+
+    def file_code(self, size=14):
+        return self._qta("fa5s.file-code", size)
+
+    def file_alt(self, size=14):
+        return self._qta("fa5s.file-alt", size)
+
+    def save(self, size=14):
+        return self._qta("fa5s.save", size)
+
+    def copy(self, size=14):
+        return self._qta("fa5s.copy", size)
+
+    def undo(self, size=14):
+        return self._qta("fa5s.undo", size)
+
+    def redo(self, size=14):
+        return self._qta("fa5s.redo", size)
+
+    def sitemap(self, size=14):
+        return self._qta("fa5s.sitemap", size)
+
+    def cog(self, size=14):
+        return self._qta("fa5s.cog", size)
+
+    def terminal(self, size=14):
+        return self._qta("fa5s.terminal", size)
+
+    def crosshairs(self, size=14):
+        return self._qta("fa5s.crosshairs", size)
+
+    def exchange_alt(self, size=14):
+        return self._qta("fa5s.exchange-alt", size)
+
+    def compress_alt(self, size=12):
+        return self._qta("fa5s.compress-alt", size)
+
+    def check_circle(self, size=12):
+        return self._qta("fa5s.check-circle", size)
+
+    def exclamation_circle(self, size=12):
+        return self._qta("fa5s.exclamation-circle", size)

@@ -5,10 +5,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from theme_tokens import Tokens
 from icon_utils import Icons
-from qss_tokens import apply_shadow
 
 t = Tokens
-ico = Icons(t.ICON_STROKE)
 
 class SearchPanel(QWidget):
     find_next_requested = pyqtSignal(str, bool, bool)
@@ -20,7 +18,11 @@ class SearchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("search_panel")
-        self._error_timer = None
+        self._error_timer = QTimer(self)
+        self._error_timer.setSingleShot(True)
+        self._error_timer.timeout.connect(self._reset_error_state)
+        
+        ico = Icons(t.ICON_STROKE)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(t.SPACE[2], t.SPACE[2], t.SPACE[2], t.SPACE[2])
@@ -99,9 +101,6 @@ class SearchPanel(QWidget):
         self.replace_all_btn.clicked.connect(self.on_replace_all)
         self.close_btn.clicked.connect(lambda: self.close_requested.emit())
         
-        for btn in (self.replace_btn, self.replace_all_btn):
-            apply_shadow(btn)
-        
         btn_layout.addWidget(self.find_prev_btn)
         btn_layout.addWidget(self.find_next_btn)
         btn_layout.addWidget(self.replace_btn)
@@ -110,8 +109,6 @@ class SearchPanel(QWidget):
         btn_layout.addWidget(self.close_btn)
         
         layout.addLayout(btn_layout)
-        
-        # QSS applied globally from qss_tokens.search_panel_qss()
 
     def set_match_count(self, current, total):
         self.match_count_label.setText(f"{current} of {total}")
@@ -119,16 +116,12 @@ class SearchPanel(QWidget):
     def set_error(self, msg="Bad pattern"):
         self.match_count_label.setText(msg)
         self.match_count_label.setStyleSheet(f"color: {t.DANGER.name()};")
-        if self._error_timer is not None:
-            self._error_timer.stop()
-        self._error_timer = QTimer(self)
-        self._error_timer.setSingleShot(True)
-        self._error_timer.timeout.connect(self._reset_match_label)
+        self._error_timer.stop()
         self._error_timer.start(1500)
 
-    def _reset_match_label(self):
-        self._error_timer = None
+    def _reset_error_state(self):
         self.match_count_label.setStyleSheet(f"color: {t.FG_MUTED.name()};")
+        self.match_count_label.setText("0 of 0")
 
     def on_find_next(self):
         self.find_next_requested.emit(
@@ -168,34 +161,6 @@ class GoToLinePanel(QWidget):
         super().__init__(parent)
         self.setObjectName("goto_line_panel")
 
-        self._normal_style = f"""
-            #goto_line_panel QLineEdit {{
-                background-color: {t.BG_APP.name()};
-                border: 1px solid {t.BORDER_FOCUS.name()};
-                border-radius: {t.RADIUS_MD}px;
-                color: {t.FG_PRIMARY.name()};
-                padding: {t.SPACE[2]}px {t.SPACE[3]}px;
-                font-family: {t.FONT_MONO};
-                min-height: 44px;
-            }}
-            #goto_line_panel QLineEdit:focus {{
-                border: 1px solid {t.BORDER_FOCUS.name()};
-                background-color: {t.BG_SURFACE.name()};
-            }}
-        """
-
-        self._error_style = f"""
-            #goto_line_panel QLineEdit {{
-                background-color: {t.BG_APP.name()};
-                border: 1px solid {t.DANGER.name()};
-                border-radius: {t.RADIUS_MD}px;
-                color: {t.FG_PRIMARY.name()};
-                padding: {t.SPACE[2]}px {t.SPACE[3]}px;
-                font-family: {t.FONT_MONO};
-                min-height: 44px;
-            }}
-        """
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(t.SPACE[2], t.SPACE[1], t.SPACE[2], t.SPACE[1])
         layout.setSpacing(t.SPACE[2])
@@ -203,7 +168,6 @@ class GoToLinePanel(QWidget):
         self.input = QLineEdit()
         self.input.setPlaceholderText("Go to line...")
         self.input.setFixedWidth(240)
-        self.input.setStyleSheet(self._normal_style)
         self.input.returnPressed.connect(self._on_enter)
         self.input.installEventFilter(self)
 
@@ -229,8 +193,8 @@ class GoToLinePanel(QWidget):
             self.set_error()
 
     def set_error(self):
-        self.input.setStyleSheet(self._error_style)
+        self.input.setStyleSheet(f"border: 1px solid {t.DANGER.name()};")
         QTimer.singleShot(1000, self.reset_style)
 
     def reset_style(self):
-        self.input.setStyleSheet(self._normal_style)
+        self.input.setStyleSheet("")

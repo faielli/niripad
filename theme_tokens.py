@@ -1,37 +1,37 @@
 from PyQt6.QtGui import QColor
 
 class Tokens:
-    BG_DEEP     = QColor("#13101F")
-    BG_PANEL    = QColor("#1E1A2E")
-    BG_APP      = QColor("#2A2440")
-    BG_SURFACE  = QColor("#332E50")
+    BG_DEEP     = QColor("#1E1E2E")
+    BG_PANEL    = QColor("#252535")
+    BG_APP      = QColor("#2D2D42")
+    BG_SURFACE  = QColor("#32324A")
 
-    FG_PRIMARY   = QColor("#EDE8FF")
-    FG_SECONDARY = QColor("#C8BFE8")
-    FG_MUTED     = QColor("#9B8FD0")
+    FG_PRIMARY   = QColor("#E2E0F0")
+    FG_SECONDARY = QColor("#9B99B8")
+    FG_MUTED     = QColor("#5A5870")
 
-    ACCENT       = QColor("#A885FF")
-    ACCENT_HOVER = QColor("#C4A5FF")
-    ACCENT_PRESS = QColor("#8A6DCC")
+    ACCENT       = QColor("#A78BFA")
+    ACCENT_HOVER = QColor("#C4B5FD")
+    ACCENT_PRESS = QColor("#6D5FA6")
 
-    BORDER_SUBTLE = QColor("#5A4E8A")
-    BORDER_FOCUS  = QColor("#A885FF")
+    BORDER_SUBTLE = QColor("#3A3A55")
+    BORDER_FOCUS  = QColor("#A78BFA")
 
-    DANGER  = QColor("#FF6B8A")
-    SUCCESS = QColor("#79DDA8")
-    WARNING = QColor("#FFD085")
+    DANGER  = QColor("#F28BAB")
+    SUCCESS = QColor("#A3E4C7")
+    WARNING = QColor("#F9C97C")
 
     SYN_KEYWORD = QColor("#B78DFF")
-    SYN_STRING  = QColor("#79DDA8")
+    SYN_STRING  = QColor("#A3E4C7")
     SYN_FUNC    = QColor("#F29EDB")
     SYN_NUMBER  = QColor("#CF9FFF")
-    SYN_TYPE    = QColor("#FFD085")
-    SYN_COMMENT = QColor("#9B8FD0")
+    SYN_TYPE    = QColor("#F9C97C")
+    SYN_COMMENT = QColor("#7A7899")
     SYN_OPER    = QColor("#9D91C4")
 
-    BRACKET_MATCH  = QColor("#A885FF")
-    MARGIN_LINE    = QColor("#3D3660")
-    WHITESPACE_DOT = QColor("#5C5478")
+    BRACKET_MATCH  = QColor("#A78BFA")
+    MARGIN_LINE    = QColor("#3A3A55")
+    WHITESPACE_DOT = QColor("#5A5870")
 
     SPACE = [0, 4, 8, 12, 16, 24, 32, 48]
 
@@ -39,24 +39,24 @@ class Tokens:
     RADIUS_MD = 8
     RADIUS_LG = 12
 
-    FONT_UI   = "'Quicksand', 'Comfortaa', 'Segoe UI', sans-serif"
-    FONT_MONO = "'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Monospace'"
+    FONT_UI   = "'Inter', 'Segoe UI', 'Ubuntu', 'Cantarell', sans-serif"
+    FONT_MONO = "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace"
     FONT_SIZE_UI = 13
-    FONT_SIZE_MONO = 13
+    FONT_SIZE_MONO = 14
 
-    ICON_STROKE      = QColor("#C8BFE8")
-    ICON_STROKE_HOVER = QColor("#EDE8FF")
-    ICON_ACTIVE      = QColor("#A885FF")
+    ICON_STROKE       = QColor("#9B99B8")
+    ICON_STROKE_HOVER = QColor("#E2E0F0")
+    ICON_ACTIVE       = QColor("#A78BFA")
 
-    SHADOW_BLUR   = 8
-    SHADOW_OFFSET = (0, 2)
-    SHADOW_COLOR  = QColor(0, 0, 0, 25)
+    SHADOW_BLUR   = 24
+    SHADOW_OFFSET = (0, 8)
+    SHADOW_COLOR  = QColor(0, 0, 0, 153)
 
     GRADIENTS = {
-        "sidebar":      "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2A2440, stop:1 #1E1A2E)",
-        "tabbar":       "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1E1A2E, stop:1 #13101F)",
-        "editor":       "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2A2440, stop:1 #242038)",
-        "search_panel": "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1E1A2E, stop:1 #161226)",
-        "statusbar":    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #13101F, stop:1 #0D0A16)",
-        "toolbar":      "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2A2440, stop:1 #1E1A2E)",
+        "sidebar":      "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #252535, stop:1 #1E1E2E)",
+        "tabbar":       "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #252535, stop:1 #1E1E2E)",
+        "editor":       "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1E1E2E, stop:1 #1E1E2E)",
+        "search_panel": "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #252535, stop:1 #1E1E2E)",
+        "statusbar":    "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1A1A2E, stop:1 #161628)",
+        "toolbar":      "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2D2D42, stop:1 #252535)",
     }

@@ -17,15 +17,19 @@ class KeybindingsDialog(QDialog):
         self.setWindowTitle("Keybindings Configuration")
         self.setMinimumWidth(420)
         self.setMinimumHeight(400)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        apply_shadow(self)
 
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(t.SPACE[3])
         self.layout.setContentsMargins(t.SPACE[4], t.SPACE[4], t.SPACE[4], t.SPACE[4])
 
         self.label = QLabel("Double click an item to change its shortcut (e.g., 'Ctrl+O', 'Ctrl+S').")
+        self.label.setObjectName("keybindings_label")
         self.layout.addWidget(self.label)
 
         self.list_widget = QListWidget()
+        self.list_widget.setObjectName("keybindings_list")
         self.list_widget.setAccessibleName("Keyboard shortcuts list")
         self.list_widget.itemDoubleClicked.connect(self.edit_binding)
         self.layout.addWidget(self.list_widget)
@@ -33,12 +37,11 @@ class KeybindingsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(t.SPACE[2])
         self.save_btn = QPushButton("Save")
+        self.save_btn.setObjectName("keybindings_save_btn")
         self.save_btn.clicked.connect(self.save_and_close)
         self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("keybindings_cancel_btn")
         self.cancel_btn.clicked.connect(self.reject)
-
-        apply_shadow(self.save_btn)
-        apply_shadow(self.cancel_btn)
 
         btn_layout.addWidget(self.save_btn)
         btn_layout.addWidget(self.cancel_btn)

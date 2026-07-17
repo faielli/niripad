@@ -3,6 +3,8 @@ from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat
 from theme import Theme
 
 class UniversalHighlighter(QSyntaxHighlighter):
+    _rules_cache = {}
+
     def __init__(self, parent, theme_dict=Theme.LILAC):
         super().__init__(parent)
         self.theme = theme_dict
@@ -11,20 +13,26 @@ class UniversalHighlighter(QSyntaxHighlighter):
 
     def set_language(self, language):
         self.current_language = language
-        self._setup_rules()
+        cache_key = (language, id(self.theme))
+        if cache_key in self._rules_cache:
+            self.rules = self._rules_cache[cache_key]
+        else:
+            self._setup_rules()
+            self._rules_cache[cache_key] = self.rules
+        self.rehighlight()
 
     def _setup_rules(self):
         self.rules = []
         
         # --- Shared Patterns ---
         # Strings: double quotes, single quotes, and triple quotes (Python)
-        string_pattern = r'"[^"\\]*(\\.[^"\\]*)*"|\'[^\'\\]*(\\.[^\'\\]*)*\'|"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\''
+        string_pattern = r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\''
         
         # Numbers: Floats, Hex, Octal, Binary, Decimals
-        number_pattern = r'\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|[0-9]*\.[0-9]+([eE][-+]?[0-9]+)?|[0-9]+([eE][-+]?[0-9]+)?)\b'
+        number_pattern = r'\b(?:0x[\da-fA-F]+|0b[01]+|0o[0-7]+|\d*\.\d+(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+)?)\b'
         
         # Operators
-        operator_pattern = r'(\+\+|--|=>|->|==|!=|<=|>=|&&|\|\||[+\-*/%&|^<>!=])'
+        operator_pattern = r'(?:\+\+|--|=>|->|==|!=|<=|>=|&&|\|\||[+\-*/%&|^<>!=])'
 
         # --- Language Specific Rules ---
         keywords = []
@@ -64,9 +72,9 @@ class UniversalHighlighter(QSyntaxHighlighter):
             comment_pattern = r"--.*"
         elif self.current_language == "json":
             keywords = []
-            comment_pattern = r"//.*" 
+            comment_pattern = r""  # JSON has no comments
             # JSON keys: string followed by colon
-            self.rules.append((re.compile(r'"[^"\\]*(\\.[^"\\]*)*"(?=\s*:)'), self._create_format(Theme.get_color(self.theme, "keyword"))))
+            self.rules.append((re.compile(r'"(?:[^"\\]|\\.)*"(?=\s*:)'), self._create_format(Theme.get_color(self.theme, "keyword"))))
         elif self.current_language == "yaml":
             keywords = []
             comment_pattern = r"#.*"
@@ -115,34 +123,35 @@ class UniversalHighlighter(QSyntaxHighlighter):
             comment_pattern = r"#.*"
 
         # --- Applying Rules ---
-        # 1. Comments (Priority)
-        self.rules.append((re.compile(comment_pattern), self._create_format(Theme.get_color(self.theme, "comment"))))
-        
-        # 2. Strings
-        self.rules.append((re.compile(string_pattern), self._create_format(Theme.get_color(self.theme, "string"))))
-        
-        # 3. Keywords
+        # 1. Keywords
         if keywords:
             pattern = r"\b(" + "|".join(map(re.escape, keywords)) + r")\b"
             self.rules.append((re.compile(pattern), self._create_format(Theme.get_color(self.theme, "keyword"))))
         
-        # 4. Types
+        # 2. Types
         if type_keywords:
             pattern = r"\b(" + "|".join(map(re.escape, type_keywords)) + r")\b"
             self.rules.append((re.compile(pattern), self._create_format(Theme.get_color(self.theme, "type"))))
             
-        # 5. Functions
+        # 3. Functions
         self.rules.append((re.compile(function_pattern), self._create_format(Theme.get_color(self.theme, "function"))))
         
-        # 6. Decorators/Attributes
+        # 4. Decorators/Attributes
         if decorator_pattern:
             self.rules.append((re.compile(decorator_pattern), self._create_format(Theme.get_color(self.theme, "decorator"))))
             
-        # 7. Numbers
+        # 5. Numbers
         self.rules.append((re.compile(number_pattern), self._create_format(Theme.get_color(self.theme, "number"))))
         
-        # 8. Operators
+        # 6. Operators
         self.rules.append((re.compile(operator_pattern), self._create_format(Theme.get_color(self.theme, "operator"))))
+
+        # 7. Comments (before strings — overwrites keywords inside comments)
+        if comment_pattern:
+            self.rules.append((re.compile(comment_pattern), self._create_format(Theme.get_color(self.theme, "comment"))))
+
+        # 8. Strings (last — overwrites everything, so `#` inside strings stays string-colored)
+        self.rules.append((re.compile(string_pattern), self._create_format(Theme.get_color(self.theme, "string"))))
 
     def _create_format(self, color):
         fmt = QTextCharFormat()
