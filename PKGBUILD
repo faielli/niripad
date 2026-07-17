@@ -9,11 +9,12 @@ license=('GPL3')
 depends=('python' 'python-pyqt6' 'python-qtawesome')
 
 source=(
+    "niripad.svg"
     "${pkgname}-${pkgver}.tar.gz"
     "niripad.sh"
     "niripad.desktop"
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     local app_dir="/usr/lib/${pkgname}"
@@ -29,4 +30,5 @@ package() {
 
     install -Dm755 "${srcdir}/niripad.sh" "${pkgdir}${bin_dir}/niripad"
     install -Dm644 "${srcdir}/niripad.desktop" "${pkgdir}${desktop_dir}/niripad.desktop"
+    install -Dm644 "${srcdir}/niripad.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/niripad.svg"
 }

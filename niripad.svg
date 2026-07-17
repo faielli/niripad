@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 680">
+  <rect width="680" height="680" rx="140" fill="#1E1E2E"/>
+  <rect x="140" y="110" width="400" height="460" rx="28" fill="#313244"/>
+  <polygon points="438,110 540,212 438,212" fill="#1E1E2E"/>
+  <polyline points="438,110 438,212 540,212" fill="none" stroke="#45475A" stroke-width="3"/>
+  <text x="340" y="476" text-anchor="middle"
+        font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
+        font-size="260" font-weight="700" fill="#CBA6F7">N</text>
+  <rect x="178" y="516" width="130" height="12" rx="4" fill="#45475A"/>
+  <rect x="178" y="536" width="90" height="12" rx="4" fill="#585B70"/>
+</svg>
