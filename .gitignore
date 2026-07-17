@@ -12,3 +12,6 @@ dist/
 .opencodeignore/*
 .opencode/*
 .codegraph/*
+*.tar.gz
+src/
+pkg/

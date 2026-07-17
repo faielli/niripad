@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Niripad
+Comment=A lightweight text editor for Wayland/X11
+Exec=/usr/bin/niripad %f
+Icon=niripad
+Terminal=false
+Categories=Utility;TextEditor;
+Keywords=editor;text;wayland;
+MimeType=text/plain;text/x-python;text/markdown;application/json;text/x-shellscript;text/x-csrc;text/x-log;
