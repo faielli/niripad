@@ -5,15 +5,15 @@ import subprocess
 import hashlib
 from pathlib import Path
 from PyQt6.QtWidgets import (
-    QMainWindow, QTabWidget, QFileDialog, QMessageBox,
+    QApplication, QMainWindow, QTabWidget, QFileDialog, QMessageBox,
     QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTabBar, QToolButton, QSizePolicy, QTextEdit
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QTextCursor, QTextDocument, QColor,
-    QIcon, QShortcut
+    QIcon, QShortcut, QDrag
 )
-from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer, QEvent, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QTimer, QEvent, QObject, QThread, pyqtSignal, QMimeData
 
 
 class GitBranchWorker(QObject):
@@ -41,6 +41,58 @@ from keybindings_dialog import KeybindingsDialog
 from icon_utils import Icons
 from qss_tokens import apply_shadow
 from theme_tokens import Tokens
+
+
+class DraggableTabBar(QTabBar):
+    def __init__(self, parent=None, pane='left', main_window=None):
+        super().__init__(parent)
+        self._pane = pane
+        self._main_window = main_window
+        self._drag_start_pos = None
+        self._drag_tab_index = -1
+        self.setAcceptDrops(True)
+        self.setMouseTracking(True)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.pos()
+            self._drag_tab_index = self.tabAt(event.pos())
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (event.buttons() & Qt.MouseButton.LeftButton and
+            self._drag_tab_index >= 0 and
+            (event.pos() - self._drag_start_pos).manhattanLength() >= QApplication.startDragDistance()):
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setData("application/x-tab-move",
+                         f"{self._pane},{self._drag_tab_index}".encode())
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.MoveAction)
+            self._drag_start_pos = None
+            self._drag_tab_index = -1
+        else:
+            super().mouseMoveEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-tab-move"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-tab-move"):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasFormat("application/x-tab-move"):
+            data = event.mimeData().data("application/x-tab-move").data().decode()
+            source_pane, source_index = data.split(",")
+            source_index = int(source_index)
+            target_index = self.tabAt(event.pos())
+            if target_index < 0:
+                target_index = self.count()
+            self._main_window._move_tab(source_pane, source_index, self._pane, target_index)
+            event.acceptProposedAction()
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -71,39 +123,6 @@ class MainWindow(QMainWindow):
         self.sidebar_layout.setContentsMargins(0, 0, 0, 0)
         self.sidebar_layout.setSpacing(0)
 
-        # Sidebar header bar
-        sidebar_header = QWidget()
-        sidebar_header.setObjectName("sidebar_header")
-        sidebar_header.setFixedHeight(34)
-        sidebar_header_layout = QHBoxLayout(sidebar_header)
-        sidebar_header_layout.setContentsMargins(6, 0, 6, 0)
-        sidebar_header_layout.setSpacing(4)
-
-        ico = Icons(Tokens.ICON_STROKE)
-
-        self.sidebar_toggle = QToolButton()
-        self.sidebar_toggle.setIcon(ico.sitemap())
-        self.sidebar_toggle.setFixedSize(26, 26)
-        self.sidebar_toggle.setAutoRaise(True)
-        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.sidebar_toggle.setToolTip("Toggle sidebar (Ctrl+B)")
-        self.sidebar_toggle.setAccessibleName("Toggle sidebar")
-        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
-
-        self.folder_btn = QToolButton()
-        self.folder_btn.setIcon(ico.folder_open())
-        self.folder_btn.setFixedSize(26, 26)
-        self.folder_btn.setAutoRaise(True)
-        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.folder_btn.setToolTip("Select root folder")
-        self.folder_btn.setAccessibleName("Select root folder")
-        self.folder_btn.clicked.connect(self.file_tree.on_browse_folder)
-
-        sidebar_header_layout.addWidget(self.sidebar_toggle)
-        sidebar_header_layout.addWidget(self.folder_btn)
-        sidebar_header_layout.addStretch()
-
-        self.sidebar_layout.addWidget(sidebar_header)
         self.sidebar_layout.addWidget(self.file_tree)
 
         # Main Splitter (sidebar_content + editor_area)
@@ -140,19 +159,70 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.splitter)
         self.setCentralWidget(self.main_container)
 
-        # Editor Container (Tabs + Search Panel)
+        # Editor Tab Widgets (left and right panes)
+        self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(False)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.setTabBar(DraggableTabBar(pane='left', main_window=self))
+        self.tabs.setAcceptDrops(True)
+
+        self.tabs_right = QTabWidget()
+        self.tabs_right.setTabsClosable(False)
+        self.tabs_right.tabCloseRequested.connect(lambda idx: self.close_tab(idx, pane='right'))
+        self.tabs_right.setTabBar(DraggableTabBar(pane='right', main_window=self))
+        self.tabs_right.setAcceptDrops(True)
+        self.tabs_right.hide()
+
+        self._active_pane = 'left'
+        self.tabs.currentChanged.connect(lambda: setattr(self, '_active_pane', 'left'))
+        self.tabs_right.currentChanged.connect(lambda: setattr(self, '_active_pane', 'right'))
+
+        self.editor_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.editor_splitter.setObjectName("editor_splitter")
+        self.editor_splitter.setHandleWidth(2)
+        self.editor_splitter.addWidget(self.tabs)
+        self.editor_splitter.addWidget(self.tabs_right)
+        self.editor_splitter.setSizes([600, 600])
+        self.editor_splitter.setStretchFactor(0, 1)
+        self.editor_splitter.setStretchFactor(1, 1)
+
+        # Editor Container (Splitter + Search Panel)
         self.editor_container = QWidget()
         self.editor_layout = QVBoxLayout(self.editor_container)
         self.editor_layout.setContentsMargins(0, 0, 0, 0)
         self.editor_layout.setSpacing(0)
-        
-        # Tabs
-        self.tabs = QTabWidget()
-        self.tabs.setTabsClosable(False)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.editor_layout.addWidget(self.tabs)
+        self.editor_layout.addWidget(self.editor_splitter)
 
-        self.tabs.setCornerWidget(None)
+        corner = QWidget()
+        corner_layout = QHBoxLayout(corner)
+        corner_layout.setContentsMargins(2, 0, 2, 0)
+        corner_layout.setSpacing(2)
+
+        ico = Icons(Tokens.ICON_STROKE)
+
+        self.sidebar_toggle = QToolButton()
+        self.sidebar_toggle.setIcon(ico.sitemap())
+        self.sidebar_toggle.setIconSize(QSize(16, 16))
+        self.sidebar_toggle.setFixedSize(28, 28)
+        self.sidebar_toggle.setAutoRaise(True)
+        self.sidebar_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sidebar_toggle.setToolTip("Toggle sidebar (Ctrl+B)")
+        self.sidebar_toggle.setAccessibleName("Toggle sidebar")
+        self.sidebar_toggle.clicked.connect(self.toggle_sidebar)
+        corner_layout.addWidget(self.sidebar_toggle)
+
+        self.folder_btn = QToolButton()
+        self.folder_btn.setIcon(ico.folder_open())
+        self.folder_btn.setIconSize(QSize(16, 16))
+        self.folder_btn.setFixedSize(28, 28)
+        self.folder_btn.setAutoRaise(True)
+        self.folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.folder_btn.setToolTip("Select root folder")
+        self.folder_btn.setAccessibleName("Select root folder")
+        self.folder_btn.clicked.connect(self.file_tree.on_browse_folder)
+        corner_layout.addWidget(self.folder_btn)
+
+        self.tabs.setCornerWidget(corner, Qt.Corner.TopLeftCorner)
         
         # Search Panel
         self.search_panel = SearchPanel()
@@ -291,9 +361,10 @@ class MainWindow(QMainWindow):
         
         # Connections
         self.tabs.currentChanged.connect(self._update_statusbar)
+        self.tabs_right.currentChanged.connect(self._update_statusbar)
         
     def _update_statusbar(self):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if not current_tab:
             return
             
@@ -330,7 +401,7 @@ class MainWindow(QMainWindow):
         self.zoom_label.setText(f"{zoom}%")
 
     def _update_cursor_pos(self):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if not current_tab:
             return
         cursor = current_tab.editor.textCursor()
@@ -338,7 +409,7 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.Wheel and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            tab = self.tabs.currentWidget()
+            tab = self._active_tab_widget().currentWidget()
             if tab:
                 angle = event.angleDelta().y()
                 if angle > 0:
@@ -391,20 +462,89 @@ class MainWindow(QMainWindow):
             "modified": QIcon(),
         }
 
+    def _active_tab_widget(self):
+        if self._active_pane == 'right' and not self.tabs_right.isHidden():
+            return self.tabs_right
+        return self.tabs
+
+    def split_editor(self):
+        tw = self.tabs_right
+        if tw.isHidden():
+            total = sum(self.splitter.sizes())
+            tw.show()
+            self.editor_splitter.setSizes([total // 2, total // 2])
+        left_tab = self.tabs.currentWidget()
+        if left_tab:
+            right_tab = EditorTab(left_tab.file_path)
+            right_tab.set_theme(self.config_manager.get("theme", "lilac"))
+            right_tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
+            right_tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
+            right_tab.editor.set_show_margin(self.show_margin_action.isChecked())
+            if left_tab.file_path:
+                right_tab.load_file(left_tab.file_path)
+            else:
+                right_tab.editor._loading = True
+                right_tab.editor.setPlainText(left_tab.editor.toPlainText())
+                right_tab.editor._loading = False
+            index = tw.addTab(right_tab, right_tab.get_title())
+            tw.setCurrentIndex(index)
+            right_tab.modified_changed.connect(
+                lambda modified, tab=right_tab: self._update_tab_title_pane('right', tw.indexOf(tab))
+            )
+            self.add_close_button_to('right', index)
+        self._active_pane = 'right'
+
+    def _update_tab_title_pane(self, pane, index):
+        tw = self.tabs if pane == 'left' else self.tabs_right
+        tab = tw.widget(index)
+        if not tab:
+            return
+        title = tab.get_title()
+        if tab.is_modified():
+            tw.setTabText(index, f"● {title}")
+            tw.setTabIcon(index, self.status_icons["modified"])
+        else:
+            tw.setTabText(index, title)
+            tw.setTabIcon(index, self.status_icons["saved"])
+
+    def _make_close_cb(self, pane, idx):
+        return lambda: self.close_tab(idx, pane)
+
+    def add_close_button_to(self, pane, index):
+        tw = self.tabs if pane == 'left' else self.tabs_right
+        close_btn = QPushButton()
+        close_btn.setIcon(Icons(Tokens.FG_MUTED).close())
+        close_btn.setIconSize(QSize(10, 10))
+        close_btn.setFixedSize(20, 20)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setAccessibleName("Close tab")
+        close_btn.setFlat(True)
+        close_btn.clicked.connect(self._make_close_cb(pane, index))
+        tw.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
+
     def toggle_word_wrap(self):
-        tab = self.tabs.currentWidget()
-        if tab:
-            tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
+        enabled = self.word_wrap_action.isChecked()
+        for tw in [self.tabs, self.tabs_right]:
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab:
+                    tab.editor.set_word_wrap(enabled)
 
     def toggle_show_whitespace(self):
-        tab = self.tabs.currentWidget()
-        if tab:
-            tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
+        enabled = self.show_whitespace_action.isChecked()
+        for tw in [self.tabs, self.tabs_right]:
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab:
+                    tab.editor.set_show_whitespace(enabled)
 
     def toggle_show_margin(self):
-        tab = self.tabs.currentWidget()
-        if tab:
-            tab.editor.set_show_margin(self.show_margin_action.isChecked())
+        enabled = self.show_margin_action.isChecked()
+        for tw in [self.tabs, self.tabs_right]:
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab:
+                    tab.editor.set_show_margin(enabled)
 
     def _cycle_encoding(self):
         encodings = ["UTF-8", "UTF-16", "Latin-1", "CP1252"]
@@ -428,7 +568,7 @@ class MainWindow(QMainWindow):
         self.tabsize_label.setText(f"Spaces: {widths[idx]}")
 
     def _reset_zoom(self):
-        tab = self.tabs.currentWidget()
+        tab = self._active_tab_widget().currentWidget()
         if tab:
             tab.editor.reset_zoom()
             self.zoom_label.setText("100%")
@@ -586,6 +726,14 @@ class MainWindow(QMainWindow):
         self.show_margin_action.triggered.connect(self.toggle_show_margin)
         view_menu.addAction(self.show_margin_action)
 
+        view_menu.addSeparator()
+
+        split_action = QAction("Split Editor", self)
+        split_action.setIcon(ico.columns())
+        split_action.setShortcut(QKeySequence("Ctrl+\\"))
+        split_action.triggered.connect(self.split_editor)
+        view_menu.addAction(split_action)
+
         # Restore View settings from session
         session_data = self.config_manager.load_session()
         view_settings = session_data.get("view_settings", {}) if session_data else {}
@@ -600,18 +748,19 @@ class MainWindow(QMainWindow):
         self.autosave_timer.start(30000)  # 30 seconds
 
     def _do_autosave(self):
-        for i in range(self.tabs.count()):
-            tab = self.tabs.widget(i)
-            if tab and tab.is_modified():
-                try:
-                    if tab.file_path:
-                        tab.save_file()
-                    else:
-                        cache_dir = self.config_manager.get_cache_dir()
-                        temp_path = os.path.join(cache_dir, f"Untitled_{i}.txt")
-                        tab.save_file(temp_path)
-                except Exception as e:
-                    print(f"Autosave failed for tab {i}: {e}")
+        for tw, prefix in [(self.tabs, ''), (self.tabs_right, 'right_')]:
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab and tab.is_modified():
+                    try:
+                        if tab.file_path:
+                            tab.save_file()
+                        else:
+                            cache_dir = self.config_manager.get_cache_dir()
+                            temp_path = os.path.join(cache_dir, f"Untitled_{prefix}{i}.txt")
+                            tab.save_file(temp_path)
+                    except Exception as e:
+                        print(f"Autosave failed for tab {i}: {e}")
 
         # Cleanup old autosave files (keep max 50, or younger than 7 days)
         try:
@@ -629,6 +778,7 @@ class MainWindow(QMainWindow):
     def _save_session(self):
         session_data = {
             "tabs": [],
+            "tabs_right": [],
             "current_index": self.tabs.currentIndex(),
             "geometry": {
                 "pos": (self.x(), self.y()),
@@ -642,16 +792,21 @@ class MainWindow(QMainWindow):
             }
         }
 
-        for i in range(self.tabs.count()):
-            tab = self.tabs.widget(i)
-            if tab:
-                tab_info = {
-                    "path": tab.file_path,
-                    "unsaved_content": None
-                }
-                if not tab.file_path:
-                    tab_info["unsaved_content"] = tab.editor.toPlainText()
-                session_data["tabs"].append(tab_info)
+        def _collect_tab_info(tw, target):
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab:
+                    tab_info = {
+                        "path": tab.file_path,
+                        "unsaved_content": None
+                    }
+                    if not tab.file_path:
+                        tab_info["unsaved_content"] = tab.editor.toPlainText()
+                    target.append(tab_info)
+
+        _collect_tab_info(self.tabs, session_data["tabs"])
+        _collect_tab_info(self.tabs_right, session_data["tabs_right"])
+        session_data["editor_splitter_sizes"] = self.editor_splitter.sizes()
 
         self.config_manager.save_session(session_data)
 
@@ -699,9 +854,9 @@ class MainWindow(QMainWindow):
                     tab.editor._loading = False
                     tab._is_modified = True
                     tab.editor.document().setModified(True)
-                    tab.modified_changed.connect(lambda modified, tab=tab: self.update_tab_title(self.tabs.indexOf(tab)))
-                    self.update_tab_title(index)
-                    self.add_close_button(index)
+                    tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane('left', self.tabs.indexOf(tab)))
+                    self._update_tab_title_pane('left', index)
+                    self.add_close_button_to('left', index)
         
         # Apply view settings to all restored tabs
         view_settings = session_data.get("view_settings", {}) if session_data else {}
@@ -718,15 +873,17 @@ class MainWindow(QMainWindow):
 
 
     def new_file(self):
+        tw = self._active_tab_widget()
+        pane = self._active_pane
         tab = EditorTab()
         tab.set_theme(self.config_manager.get("theme", "lilac"))
-        index = self.tabs.addTab(tab, tab.get_title())
-        self.tabs.setCurrentIndex(index)
+        index = tw.addTab(tab, tab.get_title())
+        tw.setCurrentIndex(index)
         tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
         tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
         tab.editor.set_show_margin(self.show_margin_action.isChecked())
-        tab.modified_changed.connect(lambda modified, tab=tab: self.update_tab_title(self.tabs.indexOf(tab)))
-        self.add_close_button(index)
+        tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane(pane, tw.indexOf(tab)))
+        self.add_close_button_to(pane, index)
 
     def open_file(self, file_path=None):
         if not file_path:
@@ -736,42 +893,36 @@ class MainWindow(QMainWindow):
             if not os.path.exists(file_path):
                 print(f"File not found: {file_path}")
                 return
-            
+
+            tw = self._active_tab_widget()
+            pane = self._active_pane
             resolved = Path(file_path).resolve()
             # Check if a tab with the same file path is already open
-            for i in range(self.tabs.count()):
-                tab = self.tabs.widget(i)
+            for i in range(tw.count()):
+                tab = tw.widget(i)
                 if tab.file_path and Path(tab.file_path).resolve() == resolved:
-                    self.tabs.setCurrentIndex(i)
+                    tw.setCurrentIndex(i)
                     self.config_manager.add_recent_file(str(resolved))
                     self._update_recent_menu()
                     return
 
             tab = EditorTab(file_path)
             tab.set_theme(self.config_manager.get("theme", "lilac"))
-            index = self.tabs.addTab(tab, tab.get_title())
-            self.tabs.setCurrentIndex(index)
+            index = tw.addTab(tab, tab.get_title())
+            tw.setCurrentIndex(index)
             tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
             tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
             tab.editor.set_show_margin(self.show_margin_action.isChecked())
-            tab.modified_changed.connect(lambda modified, tab=tab: self.update_tab_title(self.tabs.indexOf(tab)))
-            self.add_close_button(index)
+            tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane(pane, tw.indexOf(tab)))
+            self.add_close_button_to(pane, index)
             self.config_manager.add_recent_file(str(resolved))
             self._update_recent_menu()
 
     def make_close_handler(self, idx):
-        return lambda: self.close_tab(idx)
+        return lambda: self.close_tab(idx, 'left')
 
     def add_close_button(self, index):
-        close_btn = QPushButton()
-        close_btn.setIcon(Icons(Tokens.FG_MUTED).close())
-        close_btn.setIconSize(QSize(10, 10))
-        close_btn.setFixedSize(20, 20)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.setAccessibleName("Close tab")
-        close_btn.setFlat(True)
-        close_btn.clicked.connect(self.make_close_handler(index))
-        self.tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
+        self.add_close_button_to('left', index)
 
     def _close_tab_by_widget(self, tab):
         index = self.tabs.indexOf(tab)
@@ -795,13 +946,16 @@ class MainWindow(QMainWindow):
 
     def save_file(self):
 
-        index = self.tabs.currentIndex()
+        tw = self._active_tab_widget()
+        index = tw.currentIndex()
         if index < 0:
             return
-        self.save_tab_by_index(index)
+        self.save_tab_by_index(index, self._active_pane)
 
     def save_file_as(self):
-        current_tab = self.tabs.currentWidget()
+        tw = self._active_tab_widget()
+        pane = self._active_pane
+        current_tab = tw.currentWidget()
         if not current_tab:
             return
         
@@ -809,12 +963,13 @@ class MainWindow(QMainWindow):
         if file_path:
             try:
                 current_tab.save_file(file_path)
-                self.update_tab_title(self.tabs.currentIndex())
+                self._update_tab_title_pane(pane, tw.currentIndex())
             except Exception as e:
                 self.show_save_error(e, file_path)
 
-    def close_tab(self, index):
-        tab = self.tabs.widget(index)
+    def close_tab(self, index, pane='left'):
+        tw = self.tabs if pane == 'left' else self.tabs_right
+        tab = tw.widget(index)
         if tab and tab.is_modified():
             ret = QMessageBox.question(
                 self, "Save Changes?", 
@@ -825,22 +980,74 @@ class MainWindow(QMainWindow):
             )
             
             if ret == QMessageBox.StandardButton.Save:
-                if not self.save_tab_by_index(index):
+                if not self.save_tab_by_index(index, pane):
                     return
             elif ret == QMessageBox.StandardButton.Cancel:
                 return
 
-        self.tabs.removeTab(index)
-        
-        # If no tabs left, create a new one to ensure editor is never empty
-        if self.tabs.count() == 0:
+        tw.removeTab(index)
+
+        if pane == 'right':
+            if self.tabs_right.count() == 0:
+                self.tabs_right.hide()
+                ep_sizes = self.editor_splitter.sizes()
+                self.editor_splitter.setSizes([ep_sizes[0] + ep_sizes[1], 0])
+                self._active_pane = 'left'
+        elif self.tabs.count() == 0:
             self.new_file()
 
     def close_tab_action(self):
-        self.close_tab(self.tabs.currentIndex())
+        tw = self._active_tab_widget()
+        self.close_tab(tw.currentIndex(), self._active_pane)
 
-    def save_tab_by_index(self, index):
-        tab = self.tabs.widget(index)
+    def _move_tab(self, source_pane, source_index, target_pane, target_index):
+        source_tw = self.tabs if source_pane == 'left' else self.tabs_right
+        target_tw = self.tabs if target_pane == 'left' else self.tabs_right
+
+        if source_tw is target_tw and source_index == target_index:
+            return
+
+        tab = source_tw.widget(source_index)
+        if not tab:
+            return
+
+        source_tw.removeTab(source_index)
+
+        if source_tw is target_tw and source_index < target_index:
+            target_index -= 1
+
+        target_tw.insertTab(target_index, tab, tab.get_title())
+        target_tw.setCurrentIndex(target_index)
+
+        try:
+            tab.modified_changed.disconnect()
+        except TypeError:
+            pass
+        tab.modified_changed.connect(
+            lambda modified, t=tab: self._update_tab_title_pane(target_pane, target_tw.indexOf(t))
+        )
+
+        self.add_close_button_to(target_pane, target_index)
+
+        if target_tw.count() == 1:
+            self._active_pane = target_pane
+
+        if target_pane == 'right' and self.tabs_right.isHidden():
+            ep_total = sum(self.editor_splitter.sizes())
+            self.tabs_right.show()
+            self.editor_splitter.setSizes([ep_total // 2, ep_total // 2])
+
+        if source_pane == 'right' and self.tabs_right.count() == 0:
+            self.tabs_right.hide()
+            ep_sizes = self.editor_splitter.sizes()
+            self.editor_splitter.setSizes([ep_sizes[0] + ep_sizes[1], 0])
+            self._active_pane = 'left'
+        elif source_pane == 'left' and self.tabs.count() == 0:
+            self.new_file()
+
+    def save_tab_by_index(self, index, pane='left'):
+        tw = self.tabs if pane == 'left' else self.tabs_right
+        tab = tw.widget(index)
         if not tab:
             return False
         
@@ -876,41 +1083,41 @@ class MainWindow(QMainWindow):
         self._do_autosave()
         # Save session
         self._save_session()
-        
-        # Basic loop to check all tabs before closing
-        for i in range(self.tabs.count() - 1, -1, -1):
 
-            tab = self.tabs.widget(i)
-            if tab and tab.is_modified():
-                ret = QMessageBox.question(
-                    self, "Save Changes?", 
-                    f"The file {tab.get_title()} has been modified. Do you want to save it?",
-                    QMessageBox.StandardButton.Save | 
-                    QMessageBox.StandardButton.Discard | 
-                    QMessageBox.StandardButton.Cancel
-                )
-                if ret == QMessageBox.StandardButton.Save:
-                    if not self.save_tab_by_index(i):
+        for tw, pane in [(self.tabs, 'left'), (self.tabs_right, 'right')]:
+            for i in range(tw.count() - 1, -1, -1):
+
+                tab = tw.widget(i)
+                if tab and tab.is_modified():
+                    ret = QMessageBox.question(
+                        self, "Save Changes?", 
+                        f"The file {tab.get_title()} has been modified. Do you want to save it?",
+                        QMessageBox.StandardButton.Save | 
+                        QMessageBox.StandardButton.Discard | 
+                        QMessageBox.StandardButton.Cancel
+                    )
+                    if ret == QMessageBox.StandardButton.Save:
+                        if not self.save_tab_by_index(i, pane):
+                            event.ignore()
+                            return
+                    elif ret == QMessageBox.StandardButton.Cancel:
                         event.ignore()
                         return
-                elif ret == QMessageBox.StandardButton.Cancel:
-                    event.ignore()
-                    return
         event.accept()
 
     def handle_undo(self):
-        current_tab = self.tabs.currentWidget()
-        if current_tab:
-            current_tab.editor.undo()
+        tab = self._active_tab_widget().currentWidget()
+        if tab:
+            tab.editor.undo()
 
     def handle_redo(self):
-        current_tab = self.tabs.currentWidget()
-        if current_tab:
-            current_tab.editor.redo()
+        tab = self._active_tab_widget().currentWidget()
+        if tab:
+            tab.editor.redo()
 
     def toggle_search_panel(self):
         if self.search_panel.maximumHeight() > 0:
-            current_tab = self.tabs.currentWidget()
+            current_tab = self._active_tab_widget().currentWidget()
             if current_tab:
                 current_tab.editor.clear_search_highlights()
         if not hasattr(self, '_search_anim') or self._search_anim is None:
@@ -935,7 +1142,7 @@ class MainWindow(QMainWindow):
             self._create_menu()
 
     def handle_find(self, text, case_sensitive, is_regex, forward=True):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if not current_tab or not text:
             return False
 
@@ -1040,7 +1247,7 @@ class MainWindow(QMainWindow):
             return False
 
     def handle_replace(self, search_text, replace_text, case_sensitive, is_regex):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if not current_tab or not search_text:
             return
 
@@ -1068,7 +1275,7 @@ class MainWindow(QMainWindow):
             editor.setTextCursor(cursor)
 
     def handle_replace_all(self, search_text, replace_text, case_sensitive, is_regex):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if not current_tab or not search_text:
             return
 
@@ -1136,7 +1343,7 @@ class MainWindow(QMainWindow):
         self.goto_panel.hide()
 
     def handle_goto_line(self, line_number):
-        current_tab = self.tabs.currentWidget()
+        current_tab = self._active_tab_widget().currentWidget()
         if current_tab:
             max_lines = current_tab.editor.document().blockCount()
             if 1 <= line_number <= max_lines:

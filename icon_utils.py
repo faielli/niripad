@@ -98,5 +98,8 @@ class Icons:
     def check_circle(self, size=12):
         return self._qta("fa5s.check-circle", size)
 
+    def columns(self, size=14):
+        return self._qta("fa5s.columns", size)
+
     def exclamation_circle(self, size=12):
         return self._qta("fa5s.exclamation-circle", size)

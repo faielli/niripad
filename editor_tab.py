@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint, QTimer
-from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont, QTextOption
+from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont, QTextOption, QTextCharFormat
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
 from theme_tokens import Tokens
@@ -112,6 +112,8 @@ class MarginLine(QWidget):
         painter.end()
 
 class CustomEditor(QPlainTextEdit):
+    BRACKET_PAIRS = {'(': ')', '[': ']', '{': '}'}
+
     def __init__(self):
         super().__init__()
         self.language = None
@@ -137,7 +139,6 @@ class CustomEditor(QPlainTextEdit):
 
         self.textChanged.connect(self._fold_timer.start)
         self.cursorPositionChanged.connect(self._on_cursor_moved)
-        self.textChanged.connect(self._invalidate_bracket_cache)
         self._search_highlights = []
         self._bracket_highlights = []
         self._zoom_level = 100
@@ -145,7 +146,6 @@ class CustomEditor(QPlainTextEdit):
         self._margin_column = 80
         self._show_margin = True
         self._loading = False
-        self._bracket_text = ""
 
         self.update_sidebar_width()
         self.update_foldable_blocks()
@@ -180,33 +180,31 @@ class CustomEditor(QPlainTextEdit):
         self._search_highlights = []
         self.highlight_current_line()
 
-    def _invalidate_bracket_cache(self):
-        self._bracket_text = ""
-
     def _update_bracket_match(self):
         self._bracket_highlights = []
         cursor = self.textCursor()
         pos = cursor.position()
         doc = self.document()
-        if not self._bracket_text:
-            self._bracket_text = doc.toPlainText()
-        text = self._bracket_text
-        if not text or pos < 0 or pos > len(text):
+        text = doc.toPlainText()
+        if not text or pos < 0 or pos > doc.characterCount():
             self.highlight_current_line()
             return
 
-        pairs = {'(': ')', '[': ']', '{': '}'}
+        pairs = self.BRACKET_PAIRS
         match = None
         match_positions = []
+        candidate_pos = None
 
         # Check char before cursor
         if pos > 0:
             char = text[pos - 1]
             if char in pairs:
+                candidate_pos = pos - 1
                 match = self._find_matching(text, pos - 1, 1)
                 if match is not None:
                     match_positions = [pos - 1, match]
             elif char in pairs.values():
+                candidate_pos = pos - 1
                 open_for = {v: k for k, v in pairs.items()}[char]
                 match = self._find_matching(text, pos - 1, -1)
                 if match is not None:
@@ -216,10 +214,12 @@ class CustomEditor(QPlainTextEdit):
         if not match_positions and pos < len(text):
             char = text[pos]
             if char in pairs:
+                candidate_pos = pos
                 match = self._find_matching(text, pos, 1)
                 if match is not None:
                     match_positions = [pos, match]
             elif char in pairs.values():
+                candidate_pos = pos
                 open_for = {v: k for k, v in pairs.items()}[char]
                 match = self._find_matching(text, pos, -1)
                 if match is not None:
@@ -227,40 +227,67 @@ class CustomEditor(QPlainTextEdit):
 
         if match_positions:
             sels = []
+            match_color = QColor(Tokens.BRACKET_MATCH.name())
+            match_color.setAlpha(120)
             for mpos in match_positions:
-                if 0 <= mpos < len(text):
+                if 0 <= mpos < doc.characterCount() and mpos + 1 <= doc.characterCount():
                     sel = QTextEdit.ExtraSelection()
-                    color = QColor(Tokens.BRACKET_MATCH.name())
-                    color.setAlpha(80)
-                    sel.format.setBackground(color)
+                    fmt = QTextCharFormat()
+                    fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+                    fmt.setUnderlineColor(match_color)
+                    fmt.setBackground(match_color)
+                    sel.format = fmt
                     sel.cursor = QTextCursor(doc)
                     sel.cursor.setPosition(mpos)
                     sel.cursor.setPosition(mpos + 1, QTextCursor.MoveMode.KeepAnchor)
                     sels.append(sel)
             self._bracket_highlights = sels
+        elif candidate_pos is not None and candidate_pos + 1 <= doc.characterCount():
+            sel = QTextEdit.ExtraSelection()
+            fmt = QTextCharFormat()
+            fmt.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+            error_color = QColor(Tokens.DANGER.name())
+            error_color.setAlpha(120)
+            fmt.setUnderlineColor(error_color)
+            fmt.setBackground(error_color)
+            sel.format = fmt
+            sel.cursor = QTextCursor(doc)
+            sel.cursor.setPosition(candidate_pos)
+            sel.cursor.setPosition(candidate_pos + 1, QTextCursor.MoveMode.KeepAnchor)
+            self._bracket_highlights = [sel]
 
         self.highlight_current_line()
 
     def _find_matching(self, text, start, direction):
-        open_char = text[start]
-        pairs = {'(': ')', '[': ']', '{': '}'}
-        if direction == 1:
-            expected_close = pairs[open_char]
-        else:
-            reverse = {v: k for k, v in pairs.items()}
-            expected_close = reverse[open_char]
-            open_char, expected_close = expected_close, open_char
+        pairs = self.BRACKET_PAIRS
+        char = text[start]
 
-        depth = 0
-        pos = start
-        while 0 <= pos < len(text):
-            if text[pos] == open_char:
-                depth += 1
-            elif text[pos] == expected_close:
-                depth -= 1
-                if depth == 0:
-                    return pos
-            pos += direction
+        if direction == 1:
+            open_char = char
+            close_char = pairs[char]
+            depth = 0
+            pos = start
+            while pos < len(text):
+                if text[pos] == open_char:
+                    depth += 1
+                elif text[pos] == close_char:
+                    depth -= 1
+                    if depth == 0:
+                        return pos
+                pos += 1
+        else:
+            close_char = char
+            open_char = {v: k for k, v in pairs.items()}[char]
+            depth = 0
+            pos = start
+            while pos >= 0:
+                if text[pos] == close_char:
+                    depth += 1
+                elif text[pos] == open_char:
+                    depth -= 1
+                    if depth == 0:
+                        return pos
+                pos -= 1
         return None
 
     def set_word_wrap(self, enabled):

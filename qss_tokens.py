@@ -311,6 +311,14 @@ QSplitter::handle:hover {{
     background: {t.ACCENT.name()};
 }}
 
+#editor_splitter::handle:horizontal {{
+    background: {t.BORDER_SUBTLE.name()};
+    width: 2px;
+}}
+#editor_splitter::handle:horizontal:hover {{
+    background: {t.ACCENT.name()};
+}}
+
 QDialog, QMessageBox {{
     background-color: {t.BG_PANEL.name()};
     color: {t.FG_PRIMARY.name()};
@@ -384,22 +392,6 @@ QToolButton:pressed {{
     background-color: {t.BG_SURFACE.name()};
 }}
 
-/* ── Sidebar Header ──────────────────────────────────── */
-QWidget#sidebar_header {{
-    background-color: {t.BG_PANEL.name()};
-    border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
-}}
-QWidget#sidebar_header QToolButton {{
-    background: transparent;
-    border: none;
-    border-radius: {t.RADIUS_SM}px;
-    color: {t.FG_SECONDARY.name()};
-    padding: 3px;
-}}
-QWidget#sidebar_header QToolButton:hover {{
-    background: {t.BG_APP.name()};
-    color: {t.ACCENT.name()};
-}}
 
 /* ── Command Palette ─────────────────────────────────── */
 #command_palette {{

@@ -1,5 +1,10 @@
 .codegraph/
 .git/
 .gitignore
-__pychache__/
+__pycache__/
 .venv/
+*.pyc
+*.log
+instance/
+migrations/
+.env
