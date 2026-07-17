@@ -9,3 +9,6 @@ dist/
 .aider*
 .idea/
 .idea*
+.opencodeignore/*
+.opencode/*
+.codegraph/*
