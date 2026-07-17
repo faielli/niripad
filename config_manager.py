@@ -9,11 +9,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ConfigManager(QObject):
-    CONFIG_DIR = Path.home() / ".config" / "niri-editor"
+    CONFIG_DIR = Path.home() / ".config" / "niripad"
     CONFIG_FILE = CONFIG_DIR / "config.json"
     KEYBINDINGS_FILE = CONFIG_DIR / "keybindings.json"
     SESSION_FILE = CONFIG_DIR / "session.json"
-    CACHE_DIR = Path.home() / ".cache" / "niri-editor" / "unsaved"
+    CACHE_DIR = Path.home() / ".cache" / "niripad" / "unsaved"
 
 
     DEFAULT_CONFIG = {
