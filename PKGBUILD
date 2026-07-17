@@ -1,11 +1,11 @@
-# Maintainer: Your Name <your@email.com>
+# Maintainer: faielli on github
 pkgname=niripad
 pkgver=1.0.0
 pkgrel=1
 pkgdesc="A lightweight PyQt6 text editor for Wayland/X11"
 arch=('any')
-url="https://github.com/yourusername/niripad"
-license=('MIT')
+url="https://github.com/faielli/text-editor/"
+license=('GPL3')
 depends=('python' 'python-pyqt6' 'python-qtawesome')
 
 source=(
