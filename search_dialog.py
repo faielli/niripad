@@ -22,7 +22,7 @@ class SearchPanel(QWidget):
         self._error_timer.setSingleShot(True)
         self._error_timer.timeout.connect(self._reset_error_state)
         
-        ico = Icons(t.ICON_STROKE)
+        ico = Icons(t.ICON_ACTIVE)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(t.SPACE[2], t.SPACE[2], t.SPACE[2], t.SPACE[2])

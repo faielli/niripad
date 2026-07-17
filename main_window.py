@@ -55,6 +55,7 @@ class DraggableTabBar(QTabBar):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self._main_window._active_pane = self._pane
             self._drag_start_pos = event.pos()
             self._drag_tab_index = self.tabAt(event.pos())
         super().mousePressEvent(event)
@@ -140,7 +141,7 @@ class MainWindow(QMainWindow):
         strip_layout.addStretch()
         self.strip_arrow = QPushButton()
         self.strip_arrow.setObjectName("sidebar_toggle")
-        self.strip_arrow.setIcon(Icons(Tokens.ICON_STROKE).bars())
+        self.strip_arrow.setIcon(Icons(Tokens.ICON_ACTIVE).bars())
         self.strip_arrow.setIconSize(QSize(13, 13))
         self.strip_arrow.setFixedSize(22, 30)
         self.strip_arrow.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -198,7 +199,7 @@ class MainWindow(QMainWindow):
         corner_layout.setContentsMargins(2, 0, 2, 0)
         corner_layout.setSpacing(2)
 
-        ico = Icons(Tokens.ICON_STROKE)
+        ico = Icons(Tokens.ICON_ACTIVE)
 
         self.sidebar_toggle = QToolButton()
         self.sidebar_toggle.setIcon(ico.sitemap())
@@ -291,7 +292,7 @@ class MainWindow(QMainWindow):
 
     def toggle_sidebar(self):
         total = sum(self.splitter.sizes())
-        ico = Icons(Tokens.ICON_STROKE)
+        ico = Icons(Tokens.ICON_ACTIVE)
         if self.sidebar_visible:
             self.splitter.setSizes([0, total])
             self.sidebar_content.hide()
@@ -469,30 +470,57 @@ class MainWindow(QMainWindow):
 
     def split_editor(self):
         tw = self.tabs_right
+        ico = Icons(Tokens.ICON_ACTIVE)
         if tw.isHidden():
+            # --- SPLIT ---
             total = sum(self.splitter.sizes())
             tw.show()
             self.editor_splitter.setSizes([total // 2, total // 2])
-        left_tab = self.tabs.currentWidget()
-        if left_tab:
-            right_tab = EditorTab(left_tab.file_path)
-            right_tab.set_theme(self.config_manager.get("theme", "lilac"))
-            right_tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
-            right_tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
-            right_tab.editor.set_show_margin(self.show_margin_action.isChecked())
-            if left_tab.file_path:
-                right_tab.load_file(left_tab.file_path)
-            else:
-                right_tab.editor._loading = True
-                right_tab.editor.setPlainText(left_tab.editor.toPlainText())
-                right_tab.editor._loading = False
-            index = tw.addTab(right_tab, right_tab.get_title())
-            tw.setCurrentIndex(index)
-            right_tab.modified_changed.connect(
-                lambda modified, tab=right_tab: self._update_tab_title_pane('right', tw.indexOf(tab))
-            )
-            self.add_close_button_to('right', index)
-        self._active_pane = 'right'
+            left_tab = self.tabs.currentWidget()
+            if left_tab:
+                right_tab = EditorTab(left_tab.file_path, pane='right')
+                right_tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
+                right_tab.set_theme(self.config_manager.get("theme", "lilac"))
+                right_tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
+                right_tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
+                right_tab.editor.set_show_margin(self.show_margin_action.isChecked())
+                if left_tab.file_path:
+                    right_tab.load_file(left_tab.file_path)
+                else:
+                    right_tab.editor._loading = True
+                    right_tab.editor.setPlainText(left_tab.editor.toPlainText())
+                    right_tab.editor._loading = False
+                index = tw.addTab(right_tab, right_tab.get_title())
+                tw.setCurrentIndex(index)
+                right_tab.modified_changed.connect(
+                    lambda modified, tab=right_tab: self._update_tab_title_pane('right', tw.indexOf(tab))
+                )
+                self.add_close_button_to('right', index)
+            self._active_pane = 'right'
+            self.split_action.setText("Unsplit Editor")
+            self.split_action.setIcon(ico.compress_alt())
+        else:
+            # --- UNSPLIT: move all right tabs to left ---
+            while tw.count() > 0:
+                tab = tw.widget(0)
+                try:
+                    tab.modified_changed.disconnect()
+                except TypeError:
+                    pass
+                tw.removeTab(0)
+                tab._pane = 'left'
+                idx = self.tabs.addTab(tab, tab.get_title())
+                tab.modified_changed.connect(
+                    lambda modified, tab=tab: self._update_tab_title_pane('left', self.tabs.indexOf(tab))
+                )
+                self.add_close_button_to('left', idx)
+                self.tabs.setCurrentIndex(idx)
+            tw.hide()
+            ep_sizes = self.editor_splitter.sizes()
+            self.editor_splitter.setSizes([ep_sizes[0] + ep_sizes[1], 0])
+            self._active_pane = 'left'
+            self.split_action.setText("Split Editor")
+            self.split_action.setIcon(ico.columns())
 
     def _update_tab_title_pane(self, pane, index):
         tw = self.tabs if pane == 'left' else self.tabs_right
@@ -513,9 +541,9 @@ class MainWindow(QMainWindow):
     def add_close_button_to(self, pane, index):
         tw = self.tabs if pane == 'left' else self.tabs_right
         close_btn = QPushButton()
-        close_btn.setIcon(Icons(Tokens.FG_MUTED).close())
-        close_btn.setIconSize(QSize(10, 10))
-        close_btn.setFixedSize(20, 20)
+        close_btn.setIcon(Icons(Tokens.ICON_ACTIVE).close())
+        close_btn.setIconSize(QSize(12, 12))
+        close_btn.setFixedSize(16, 16)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setAccessibleName("Close tab")
         close_btn.setFlat(True)
@@ -597,7 +625,7 @@ class MainWindow(QMainWindow):
     def _create_menu(self):
         menubar = self.menuBar()
         
-        ico = Icons(Tokens.ICON_STROKE)
+        ico = Icons(Tokens.ICON_ACTIVE)
         
         # Clear existing menus if any (for reloading)
         for action in menubar.actions():
@@ -728,11 +756,11 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        split_action = QAction("Split Editor", self)
-        split_action.setIcon(ico.columns())
-        split_action.setShortcut(QKeySequence("Ctrl+\\"))
-        split_action.triggered.connect(self.split_editor)
-        view_menu.addAction(split_action)
+        self.split_action = QAction("Split Editor", self)
+        self.split_action.setIcon(ico.columns())
+        self.split_action.setShortcut(QKeySequence("Ctrl+\\"))
+        self.split_action.triggered.connect(self.split_editor)
+        view_menu.addAction(self.split_action)
 
         # Restore View settings from session
         session_data = self.config_manager.load_session()
@@ -846,7 +874,8 @@ class MainWindow(QMainWindow):
                     if content_hash in seen_unsaved:
                         continue
                     seen_unsaved.add(content_hash)
-                    tab = EditorTab()
+                    tab = EditorTab(pane='left')
+                    tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
                     tab.set_theme(self.config_manager.get("theme", "lilac"))
                     index = self.tabs.addTab(tab, tab.get_title())
                     tab.editor._loading = True
@@ -875,7 +904,8 @@ class MainWindow(QMainWindow):
     def new_file(self):
         tw = self._active_tab_widget()
         pane = self._active_pane
-        tab = EditorTab()
+        tab = EditorTab(pane=pane)
+        tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
         tab.set_theme(self.config_manager.get("theme", "lilac"))
         index = tw.addTab(tab, tab.get_title())
         tw.setCurrentIndex(index)
@@ -906,7 +936,8 @@ class MainWindow(QMainWindow):
                     self._update_recent_menu()
                     return
 
-            tab = EditorTab(file_path)
+            tab = EditorTab(file_path, pane=pane)
+            tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
             tab.set_theme(self.config_manager.get("theme", "lilac"))
             index = tw.addTab(tab, tab.get_title())
             tw.setCurrentIndex(index)

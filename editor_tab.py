@@ -1,6 +1,6 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
-from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint, QTimer
+from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont, QTextOption, QTextCharFormat
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
@@ -575,12 +575,14 @@ class CustomEditor(QPlainTextEdit):
 
 class EditorTab(QWidget):
     modified_changed = pyqtSignal(bool)
+    pane_activated = pyqtSignal(str)
 
-    def __init__(self, file_path=None):
+    def __init__(self, file_path=None, pane='left'):
         super().__init__()
         self.file_path = file_path
         self._is_modified = False
         self._language = None
+        self._pane = pane
         
         self.layout = QVBoxLayout(self)
 
@@ -590,6 +592,7 @@ class EditorTab(QWidget):
         self.editor.textChanged.connect(self.on_text_changed)
         self.editor.blockCountChanged.connect(self.editor.update_sidebar_width)
         self.editor.update_sidebar_width()
+        self.editor.viewport().installEventFilter(self)
         self.layout.addWidget(self.editor)
 
         # Setup theme and highlighter
@@ -600,6 +603,11 @@ class EditorTab(QWidget):
         
         if file_path:
             self.load_file(file_path)
+
+    def eventFilter(self, obj, event):
+        if obj is self.editor.viewport() and event.type() == QEvent.Type.MouseButtonPress:
+            self.pane_activated.emit(self._pane)
+        return super().eventFilter(obj, event)
 
     def set_theme(self, theme_name):
         self.current_theme = Theme.by_name(theme_name)

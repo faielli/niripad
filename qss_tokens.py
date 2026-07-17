@@ -112,7 +112,13 @@ QTabBar::tab:!selected {{
 QTabBar::close-button {{
     image: none;
     subcontrol-position: right;
-    padding: 2px;
+    border-radius: 3px;
+    width: 16px;
+    height: 16px;
+}}
+QTabBar::close-button:hover {{
+    height: 18px;
+    background: transparent;
 }}
 
 QTreeWidget {{

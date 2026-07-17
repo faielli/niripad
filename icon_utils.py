@@ -9,7 +9,7 @@ except ImportError:
 
 from theme_tokens import Tokens
 
-ICON_DEFAULT = Tokens.FG_SECONDARY.name()
+ICON_DEFAULT = Tokens.ICON_ACTIVE.name()
 ICON_HOVER = Tokens.ACCENT.name()
 ICON_ACTIVE = Tokens.ACCENT_HOVER.name()
 
@@ -24,7 +24,7 @@ class Icons:
     _cache = {}
 
     def __init__(self, color: QColor = None):
-        self._c = color or Tokens.FG_SECONDARY
+        self._c = color or Tokens.ICON_ACTIVE
 
     def _qta(self, name, size=14):
         return get_icon(name, self._c.name(), size)

@@ -34,7 +34,7 @@ class CommandPalette(QDialog):
         self.search_input.setAccessibleName("Search actions")
         self.search_input.textChanged.connect(self.filter_actions)
         self.search_input.returnPressed.connect(self.on_enter_pressed)
-        search_icon = Icons(t.ICON_STROKE).search()
+        search_icon = Icons(t.ICON_ACTIVE).search()
         self.search_input.addAction(QAction(search_icon, "", self),
                                     QLineEdit.ActionPosition.LeadingPosition)
         layout.addWidget(self.search_input)

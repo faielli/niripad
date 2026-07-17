@@ -39,7 +39,7 @@ class FileTree(QWidget):
 
     def _file_icon(self, filename):
         ext = os.path.splitext(filename)[1].lower()
-        ico = Icons(Tokens.ICON_STROKE)
+        ico = Icons(Tokens.FG_PRIMARY)
         if ext in ('.py', '.pyw'):
             return ico.file_code()
         if ext in ('.js', '.ts', '.jsx', '.tsx'):
@@ -66,7 +66,7 @@ class FileTree(QWidget):
         parent_path = os.path.dirname(path)
         if parent_path != path:
             parent_item = QTreeWidgetItem(self.tree, [".."])
-            parent_item.setIcon(0, Icons(Tokens.ICON_STROKE).folder())
+            parent_item.setIcon(0, Icons(Tokens.ICON_ACTIVE).folder())
             font = parent_item.font(0)
             font.setItalic(True)
             parent_item.setFont(0, font)
@@ -104,7 +104,7 @@ class FileTree(QWidget):
         
         # Add directories - lazy population, collapsible
         dir_items = []
-        ico = Icons(Tokens.ICON_STROKE)
+        ico = Icons(Tokens.ICON_ACTIVE)
         for d in dirs:
             full_path = os.path.join(path, d)
             item = QTreeWidgetItem([d])
@@ -146,7 +146,7 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, Icons(Tokens.ICON_STROKE).folder_open())
+            item.setIcon(0, Icons(Tokens.ICON_ACTIVE).folder_open())
             
             populated = item.data(0, Qt.ItemDataRole.UserRole + 1)
             if not populated:
@@ -161,7 +161,7 @@ class FileTree(QWidget):
             return
         
         if os.path.isdir(path):
-            item.setIcon(0, Icons(Tokens.ICON_STROKE).folder())
+            item.setIcon(0, Icons(Tokens.ICON_ACTIVE).folder())
             item.setData(0, Qt.ItemDataRole.UserRole + 1, False)
             while item.childCount() > 0:
                 item.removeChild(item.child(0))
