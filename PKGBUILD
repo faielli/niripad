@@ -4,7 +4,7 @@ pkgver=1.0.0
 pkgrel=1
 pkgdesc="A lightweight PyQt6 text editor for Wayland/X11"
 arch=('any')
-url="https://github.com/faielli/text-editor/"
+url="https://github.com/faielli/niripad/"
 license=('GPL3')
 depends=('python' 'python-pyqt6' 'python-qtawesome')
 
