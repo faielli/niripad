@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Niri Editor
-Comment=A lightweight text editor for Niri/Wayland
-Exec=python3 /home/fede/Projects/editor_selfmade/main.py
-Icon=text-editor
-Terminal=false
-Categories=Utility;TextEditor;
-Keywords=editor;text;niri;wayland;

@@ -22,25 +22,24 @@ QMainWindow {{
 QWidget {{
     color: {t.FG_PRIMARY.name()};
     font-family: {t.FONT_UI};
-    font-size: {t.FONT_SIZE_UI}px;
 }}
 
 QMenuBar {{
     background-color: {t.BG_PANEL.name()};
     color: {t.FG_PRIMARY.name()};
     font-size: 13px;
-    padding: 2px 4px;
+    padding: 4px 8px;
     border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
     spacing: 0px;
 }}
 QMenuBar::item {{
-    padding: 4px 12px;
+    padding: 6px 16px;
     border-radius: 6px;
     background: transparent;
 }}
 QMenuBar::item:selected, QMenuBar::item:pressed {{
-    background-color: {t.ACCENT_PRESS.name()};
-    color: {t.ACCENT_HOVER.name()};
+    background-color: {t.BG_SURFACE.name()};
+    color: {t.FG_PRIMARY.name()};
 }}
 QMenu {{
     background-color: {t.BG_APP.name()};
@@ -150,7 +149,6 @@ QPlainTextEdit, QTextEdit {{
     background-color: {t.BG_DEEP.name()};
     color: {t.FG_PRIMARY.name()};
     font-family: {t.FONT_MONO};
-    font-size: {t.FONT_SIZE_MONO}pt;
     line-height: 1.6;
     border: none;
     selection-background-color: {t.BG_SURFACE.name()};
@@ -543,16 +541,15 @@ def search_panel_qss() -> str:
 
 #goto_line_panel {{
     background: {t.BG_PANEL.name()};
-    border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
+    border-top: 1px solid {t.BORDER_SUBTLE.name()};
 }}
 #goto_line_panel QLineEdit {{
     background-color: {t.BG_DEEP.name()};
-    border: 1px solid {t.BORDER_FOCUS.name()};
+    border: 1px solid {t.BORDER_SUBTLE.name()};
     border-radius: {t.RADIUS_SM}px;
     color: {t.FG_PRIMARY.name()};
     padding: 5px 10px;
     font-family: {t.FONT_MONO};
-    min-height: 24px;
 }}
 #goto_line_panel QLineEdit:focus {{
     border-color: {t.BORDER_FOCUS.name()};

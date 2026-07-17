@@ -3,8 +3,12 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from PyQt6.QtCore import QObject, pyqtSignal
+import logging
 
-class ConfigManager:
+logger = logging.getLogger(__name__)
+
+class ConfigManager(QObject):
     CONFIG_DIR = Path.home() / ".config" / "niri-editor"
     CONFIG_FILE = CONFIG_DIR / "config.json"
     KEYBINDINGS_FILE = CONFIG_DIR / "keybindings.json"
@@ -28,6 +32,8 @@ class ConfigManager:
         "recent_files": []
     }
 
+    bindings_changed = pyqtSignal(dict)
+
     DEFAULT_KEYBINDINGS = {
         "new_file": "Ctrl+N",
         "open_file": "Ctrl+O",
@@ -43,6 +49,7 @@ class ConfigManager:
     }
 
     def __init__(self):
+        super().__init__()
         self.config = {}
         self.keybindings = {}
         self._ensure_config_dir()
@@ -57,7 +64,7 @@ class ConfigManager:
         self._ensure_config_dir()
         fd, tmp_path = tempfile.mkstemp(dir=self.CONFIG_DIR, suffix=".tmp")
         try:
-            with os.fdopen(fd, 'w') as f:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
             os.replace(tmp_path, target)
         except Exception:
@@ -70,14 +77,14 @@ class ConfigManager:
     def load_config(self):
         if self.CONFIG_FILE.exists():
             try:
-                with open(self.CONFIG_FILE, 'r') as f:
+                with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                     self.config = json.load(f)
             except Exception as e:
-                print(f"Error loading config: {e}")
+                logger.error("Error loading config: %s", e)
                 backup = self.CONFIG_FILE.with_suffix(".json.bad")
                 try:
                     self.CONFIG_FILE.rename(backup)
-                    print(f"Backed up corrupt config to {backup}")
+                    logger.warning("Backed up corrupt config to %s", backup)
                 except Exception:
                     pass
                 self.config = {}
@@ -105,19 +112,19 @@ class ConfigManager:
         try:
             self._atomic_write_json(str(self.CONFIG_FILE), self.config)
         except Exception as e:
-            print(f"Error saving config: {e}")
+            logger.error("Error saving config: %s", e)
 
     def load_keybindings(self):
         self.keybindings = copy.deepcopy(self.DEFAULT_KEYBINDINGS)
         
         if self.KEYBINDINGS_FILE.exists():
             try:
-                with open(self.KEYBINDINGS_FILE, 'r') as f:
+                with open(self.KEYBINDINGS_FILE, 'r', encoding='utf-8') as f:
                     user_bindings = json.load(f)
                     # Merge user bindings into defaults
                     self.keybindings.update(user_bindings)
             except Exception as e:
-                print(f"Error loading keybindings: {e}")
+                logger.error("Error loading keybindings: %s", e)
 
         else:
             self.keybindings = copy.deepcopy(self.DEFAULT_KEYBINDINGS)
@@ -127,25 +134,26 @@ class ConfigManager:
         seen = {}
         for action, shortcut in self.keybindings.items():
             if shortcut in seen:
-                print(f"Warning: duplicate shortcut '{shortcut}' for '{action}' and '{seen[shortcut]}'")
+                logger.warning("Duplicate shortcut %r for %r and %r", shortcut, action, seen[shortcut])
             seen[shortcut] = action
         try:
             self._atomic_write_json(str(self.KEYBINDINGS_FILE), self.keybindings)
         except Exception as e:
-            print(f"Error saving keybindings: {e}")
+            logger.error("Error saving keybindings: %s", e)
+        self.bindings_changed.emit(self.keybindings)
 
     def load_session(self):
         if self.SESSION_FILE.exists():
             try:
-                with open(self.SESSION_FILE, 'r') as f:
+                with open(self.SESSION_FILE, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return data if isinstance(data, dict) else {}
             except Exception as e:
-                print(f"Error loading session: {e}")
+                logger.error("Error loading session: %s", e)
                 backup = self.SESSION_FILE.with_suffix(".session.bad")
                 try:
                     self.SESSION_FILE.rename(backup)
-                    print(f"Backed up corrupt session to {backup}")
+                    logger.warning("Backed up corrupt session to %s", backup)
                 except Exception:
                     pass
         return {}
@@ -154,7 +162,7 @@ class ConfigManager:
         try:
             self._atomic_write_json(str(self.SESSION_FILE), session_data)
         except Exception as e:
-            print(f"Error saving session: {e}")
+            logger.error("Error saving session: %s", e)
 
     def get_cache_dir(self):
         self.CACHE_DIR.mkdir(parents=True, exist_ok=True)

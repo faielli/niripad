@@ -1,10 +1,23 @@
 import os
+from pathlib import Path
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit, QTextEdit
 from PyQt6.QtCore import pyqtSignal, Qt, QRect, QSize, QPoint, QTimer, QEvent
 from PyQt6.QtGui import QColor, QPainter, QTextFormat, QFontMetrics, QTextCursor, QFont, QTextOption, QTextCharFormat
 from syntax_highlighter import UniversalHighlighter
 from theme import Theme
 from theme_tokens import Tokens
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _is_path_safe(file_path):
+    resolved = Path(file_path).resolve()
+    parts = Path(file_path).parts
+    if ".." in parts:
+        logger.warning("Path traversal detected in %r, resolving to %r", file_path, resolved)
+    return True
+
 
 def detect_language(file_path, content=""):
     if not file_path:
@@ -113,6 +126,35 @@ class MarginLine(QWidget):
 
 class CustomEditor(QPlainTextEdit):
     BRACKET_PAIRS = {'(': ')', '[': ']', '{': '}'}
+    clicked = pyqtSignal()
+
+    FOLD_PATTERNS = {
+        "python": {
+            "end_marker": ":",
+            "prefixes": ("def ", "class ", "if ", "elif ", "for ", "while ", "try", "except", "with ", "async def")
+        },
+        "javascript": {
+            "end_marker": "{",
+            "prefixes": ("function ", "if ", "for ", "while ", "switch ", "class ", "const ", "let ", "var ")
+        },
+        "typescript": {
+            "end_marker": "{",
+            "prefixes": ("function ", "if ", "for ", "while ", "switch ", "class ", "const ", "let ", "var ", "interface ", "enum ")
+        },
+        "rust": {
+            "end_marker": "{",
+            "prefixes": ("fn ", "if ", "for ", "while ", "match ", "struct ", "enum ", "impl ", "mod ", "trait ", "pub ", "unsafe ")
+        },
+        "go": {
+            "end_marker": "{",
+            "prefixes": ("func ", "if ", "for ", "switch ", "type ", "struct ", "interface ", "select ")
+        },
+    }
+
+    DEFAULT_FOLD_PATTERNS = [
+        {"end_marker": ":", "prefixes": ("def ", "class ", "if ", "for ", "while ", "try", "except", "with ")},
+        {"end_marker": "{", "prefixes": ("if ", "for ", "while ", "switch ", "void ", "int ", "float ", "char ", "class ", "struct ")},
+    ]
 
     def __init__(self):
         super().__init__()
@@ -136,6 +178,9 @@ class CustomEditor(QPlainTextEdit):
         self._fold_timer.timeout.connect(self.update_foldable_blocks)
 
         self._theme_dict = Theme.by_name("lilac")
+        self._cached_cursor_pos = -1
+        self._cached_bracket_count = -1
+        self._cached_search_count = -1
 
         self.textChanged.connect(self._fold_timer.start)
         self.cursorPositionChanged.connect(self._on_cursor_moved)
@@ -156,6 +201,15 @@ class CustomEditor(QPlainTextEdit):
         self._update_bracket_match()
 
     def highlight_current_line(self):
+        cursor_pos = self.textCursor().position()
+        if (cursor_pos == self._cached_cursor_pos
+                and self._cached_bracket_count == len(self._bracket_highlights)
+                and self._cached_search_count == len(self._search_highlights)):
+            return
+        self._cached_cursor_pos = cursor_pos
+        self._cached_bracket_count = len(self._bracket_highlights)
+        self._cached_search_count = len(self._search_highlights)
+
         extra_selections = []
         
         selection = QTextEdit.ExtraSelection()
@@ -178,6 +232,11 @@ class CustomEditor(QPlainTextEdit):
 
     def clear_search_highlights(self):
         self._search_highlights = []
+        self.highlight_current_line()
+
+    def clear_highlights(self):
+        self._search_highlights = []
+        self._bracket_highlights = []
         self.highlight_current_line()
 
     def _update_bracket_match(self):
@@ -258,9 +317,85 @@ class CustomEditor(QPlainTextEdit):
 
         self.highlight_current_line()
 
+    def _get_string_regions(self, text):
+        regions = set()
+        i = 0
+        n = len(text)
+        in_single = False
+        in_double = False
+        in_triple_single = False
+        in_triple_double = False
+        in_comment = False
+        while i < n:
+            if in_comment:
+                if text[i] == '\n':
+                    in_comment = False
+                else:
+                    regions.add(i)
+                    i += 1
+                    continue
+            if i < n - 1 and text[i:i+2] == '//':
+                in_comment = True
+                continue
+            if text[i] == '#' and (i == 0 or text[i-1] not in '\'"'):
+                in_comment = True
+                continue
+            if text[i] == '\\':
+                if in_single or in_double:
+                    regions.add(i)
+                    i += 1
+                    if i < n:
+                        regions.add(i)
+                        i += 1
+                    continue
+                i += 1
+                continue
+            if i <= n - 3 and text[i:i+3] == "'''":
+                if not in_double and not in_triple_single:
+                    in_triple_single = True
+                    for j in range(i, i+3):
+                        regions.add(j)
+                    i += 3
+                    continue
+                elif in_triple_single:
+                    for j in range(i, i+3):
+                        regions.add(j)
+                    in_triple_single = False
+                    i += 3
+                    continue
+            if i <= n - 3 and text[i:i+3] == '"""':
+                if not in_single and not in_triple_double:
+                    in_triple_double = True
+                    for j in range(i, i+3):
+                        regions.add(j)
+                    i += 3
+                    continue
+                elif in_triple_double:
+                    for j in range(i, i+3):
+                        regions.add(j)
+                    in_triple_double = False
+                    i += 3
+                    continue
+            if text[i] == "'" and not in_double and not in_triple_double:
+                in_single = not in_single
+                regions.add(i)
+                i += 1
+                continue
+            if text[i] == '"' and not in_single and not in_triple_single:
+                in_double = not in_double
+                regions.add(i)
+                i += 1
+                continue
+            if in_single or in_double or in_triple_single or in_triple_double:
+                regions.add(i)
+            i += 1
+        return regions
+
     def _find_matching(self, text, start, direction):
         pairs = self.BRACKET_PAIRS
         char = text[start]
+
+        string_regions = self._get_string_regions(text)
 
         if direction == 1:
             open_char = char
@@ -268,12 +403,13 @@ class CustomEditor(QPlainTextEdit):
             depth = 0
             pos = start
             while pos < len(text):
-                if text[pos] == open_char:
-                    depth += 1
-                elif text[pos] == close_char:
-                    depth -= 1
-                    if depth == 0:
-                        return pos
+                if pos not in string_regions:
+                    if text[pos] == open_char:
+                        depth += 1
+                    elif text[pos] == close_char:
+                        depth -= 1
+                        if depth == 0:
+                            return pos
                 pos += 1
         else:
             close_char = char
@@ -281,12 +417,13 @@ class CustomEditor(QPlainTextEdit):
             depth = 0
             pos = start
             while pos >= 0:
-                if text[pos] == close_char:
-                    depth += 1
-                elif text[pos] == open_char:
-                    depth -= 1
-                    if depth == 0:
-                        return pos
+                if pos not in string_regions:
+                    if text[pos] == close_char:
+                        depth += 1
+                    elif text[pos] == open_char:
+                        depth -= 1
+                        if depth == 0:
+                            return pos
                 pos -= 1
         return None
 
@@ -315,9 +452,9 @@ class CustomEditor(QPlainTextEdit):
 
     def set_zoom_level(self, level):
         self._zoom_level = max(50, min(200, level))
-        font = self.font()
+        font = QFont(Tokens.FONT_MONO.split(",")[0].strip("'"))
         base = Tokens.FONT_SIZE_MONO
-        font.setPointSize(int(base * self._zoom_level / 100))
+        font.setPointSizeF(max(1.0, base * self._zoom_level / 100.0))
         self.setFont(font)
         self.update_sidebar_width()
 
@@ -349,7 +486,10 @@ class CustomEditor(QPlainTextEdit):
             digits += 1
         
         paint_font = self.font()
-        paint_font.setPointSize(paint_font.pointSize() + 1)
+        current_size = paint_font.pointSizeF()
+        if current_size <= 0:
+            current_size = Tokens.FONT_SIZE_MONO
+        paint_font.setPointSize(int(current_size) + 1)
         metrics = QFontMetrics(paint_font)
         space = 12
 
@@ -380,7 +520,10 @@ class CustomEditor(QPlainTextEdit):
 
     def update_foldable_blocks(self):
         self.foldable_blocks = {}
-        
+
+        fetched = self.FOLD_PATTERNS.get(self.language, self.DEFAULT_FOLD_PATTERNS)
+        patterns = fetched if isinstance(fetched, list) else [fetched]
+
         block_count = self.document().blockCount()
         if block_count > 2000:
             first_visible = self.firstVisibleBlock().blockNumber()
@@ -389,15 +532,18 @@ class CustomEditor(QPlainTextEdit):
             block = self.document().findBlockByNumber(start)
         else:
             block = self.document().begin()
-        
+
         while block.isValid():
             text = block.text()
             stripped = text.strip()
-            
-            is_python_fold = stripped.endswith(':') and any(stripped.startswith(k) for k in ['def ', 'class ', 'if ', 'for ', 'while ', 'try', 'except', 'with '])
-            is_c_style_fold = stripped.endswith('{') and any(stripped.startswith(k) for k in ['if ', 'for ', 'while ', 'switch ', 'void ', 'int ', 'float ', 'char ', 'class ', 'struct '])
-            
-            if is_python_fold or is_c_style_fold:
+
+            is_fold = False
+            for pat in patterns:
+                if stripped.endswith(pat["end_marker"]) and any(stripped.startswith(k) for k in pat["prefixes"]):
+                    is_fold = True
+                    break
+
+            if is_fold:
                 start_block = block.blockNumber()
                 start_indent = len(text) - len(text.lstrip())
                 
@@ -449,6 +595,7 @@ class CustomEditor(QPlainTextEdit):
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
+        self.clicked.emit()
         self.highlight_current_line()
 
     def keyPressEvent(self, event):
@@ -467,9 +614,9 @@ class CustomEditor(QPlainTextEdit):
             if not cursor.hasSelection():
                 pos = cursor.position()
                 text = self.toPlainText()
-                if 0 < pos < len(text):
+                if 0 < pos <= len(text):
                     pairs_bs = [('(', ')'), ('[', ']'), ('{', '}'), ('"', '"'), ("'", "'")]
-                    if (text[pos-1], text[pos]) in pairs_bs:
+                    if pos < len(text) and (text[pos-1], text[pos]) in pairs_bs:
                         cursor.beginEditBlock()
                         cursor.setPosition(pos - 1)
                         cursor.setPosition(pos + 1, QTextCursor.MoveMode.KeepAnchor)
@@ -543,9 +690,12 @@ class CustomEditor(QPlainTextEdit):
         
         # Increase font size slightly for line numbers
         font = self.font()
-        font.setPointSize(font.pointSize() + 1)
+        current_size = font.pointSizeF()
+        if current_size <= 0:
+            current_size = Tokens.FONT_SIZE_MONO
+        font.setPointSize(int(current_size) + 1)
         painter.setFont(font)
-        
+
         gutter_bg = Theme.get_color(self._theme_dict, "gutter_bg")
         painter.fillRect(event.rect(), gutter_bg)
         
@@ -581,6 +731,7 @@ class EditorTab(QWidget):
         super().__init__()
         self.file_path = file_path
         self._is_modified = False
+        self._load_error = None
         self._language = None
         self._pane = pane
         
@@ -592,7 +743,7 @@ class EditorTab(QWidget):
         self.editor.textChanged.connect(self.on_text_changed)
         self.editor.blockCountChanged.connect(self.editor.update_sidebar_width)
         self.editor.update_sidebar_width()
-        self.editor.viewport().installEventFilter(self)
+        self.editor.clicked.connect(lambda: self.pane_activated.emit(self._pane))
         self.layout.addWidget(self.editor)
 
         # Setup theme and highlighter
@@ -603,11 +754,6 @@ class EditorTab(QWidget):
         
         if file_path:
             self.load_file(file_path)
-
-    def eventFilter(self, obj, event):
-        if obj is self.editor.viewport() and event.type() == QEvent.Type.MouseButtonPress:
-            self.pane_activated.emit(self._pane)
-        return super().eventFilter(obj, event)
 
     def set_theme(self, theme_name):
         self.current_theme = Theme.by_name(theme_name)
@@ -628,26 +774,27 @@ class EditorTab(QWidget):
         fg_color = Theme.get_color(self.current_theme, "foreground")
         selection_bg = Theme.get_color(self.current_theme, "selection_background")
         selection_fg = Theme.get_color(self.current_theme, "selection_foreground")
+        sel_rgba = f"rgba({selection_bg.red()}, {selection_bg.green()}, {selection_bg.blue()}, 0.5)"
 
         self.editor.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: {bg_color.name()};
                 color: {fg_color.name()};
                 border: none;
-                selection-background-color: {selection_bg.name()};
+                selection-background-color: {sel_rgba};
                 selection-color: {selection_fg.name()};
-                font-family: {Tokens.FONT_MONO};
-                font-size: {Tokens.FONT_SIZE_MONO}pt;
             }}
         """)
 
     def load_file(self, file_path):
+        file_path = str(Path(file_path).resolve())
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         except Exception as e:
-            print(f"Error loading file {file_path}: {e}")
-            return
+            self._load_error = str(e)
+            logger.error("Failed to load file %s: %s", file_path, e)
+            return False
 
         self.editor._loading = True
         try:
@@ -661,11 +808,12 @@ class EditorTab(QWidget):
         self.modified_changed.emit(self._is_modified)
 
         lang = detect_language(file_path, content)
-        print(f"[DEBUG] Detected language: {lang}")
+        logger.debug("Detected language: %s", lang)
         self._language = lang
         self.highlighter.set_language(lang)
         if lang:
             self.editor.language = lang
+        return True
 
     @property
     def language(self):
@@ -673,7 +821,7 @@ class EditorTab(QWidget):
 
     def save_file(self, file_path=None):
         if file_path:
-            self.file_path = file_path
+            self.file_path = str(Path(file_path).resolve())
 
         if not self.file_path:
             return False
@@ -681,8 +829,9 @@ class EditorTab(QWidget):
         try:
             with open(self.file_path, 'w', encoding='utf-8') as f:
                 f.write(self.editor.toPlainText())
-        except Exception:
-            return False
+        except Exception as e:
+            logger.error("Failed to save file %s: %s", self.file_path, e)
+            raise
 
         self._is_modified = False
         self.editor.document().setModified(False)
@@ -696,6 +845,9 @@ class EditorTab(QWidget):
         if new_mod != self._is_modified:
             self._is_modified = new_mod
             self.modified_changed.emit(self._is_modified)
+
+    def clear_highlights(self):
+        self.editor.clear_highlights()
 
     def is_modified(self):
         return self._is_modified

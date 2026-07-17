@@ -160,19 +160,28 @@ class GoToLinePanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("goto_line_panel")
+        self.setFixedHeight(42)
+
+        ico = Icons(t.ICON_ACTIVE)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(t.SPACE[2], t.SPACE[1], t.SPACE[2], t.SPACE[1])
-        layout.setSpacing(t.SPACE[2])
+        layout.setContentsMargins(8, 3, 8, 11)
+        layout.setSpacing(6)
 
         self.input = QLineEdit()
         self.input.setPlaceholderText("Go to line...")
-        self.input.setFixedWidth(240)
+        self.input.setFixedHeight(28)
         self.input.returnPressed.connect(self._on_enter)
         self.input.installEventFilter(self)
-
         layout.addWidget(self.input)
-        layout.addStretch()
+
+        self.close_btn = QPushButton()
+        self.close_btn.setIcon(ico.close())
+        self.close_btn.setFixedSize(36, 28)
+        self.close_btn.setAccessibleName("Close")
+        self.close_btn.setToolTip("Close (Escape)")
+        self.close_btn.clicked.connect(lambda: self.close_requested.emit())
+        layout.addWidget(self.close_btn)
 
     def eventFilter(self, obj, event):
         if obj is self.input and event.type() == event.Type.KeyPress:

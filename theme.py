@@ -72,13 +72,13 @@ class Theme:
         "heading":     Tokens.SYN_KEYWORD,
         "bold":        Tokens.SYN_TYPE,
         "italic":      Tokens.SYN_STRING,
-        "link":        QColor("#A78BFA"),
+        "link":        Tokens.ACCENT,
         "code":        Tokens.SYN_COMMENT,
-        "selection_background": Tokens.BG_SURFACE,
+        "selection_background": Tokens.SELECTION_BG,
         "selection_foreground": Tokens.FG_PRIMARY,
         "gutter_bg": Tokens.BG_PANEL,
         "line_number_fg": Tokens.FG_MUTED,
-        "current_line_bg": Tokens.BG_SURFACE,
+        "current_line_bg": Tokens.CURRENT_LINE_BG,
     }
 
     LIGHT = {
@@ -119,6 +119,8 @@ class Theme:
 
     @staticmethod
     def get_color(theme_dict, key):
+        if not isinstance(theme_dict, dict):
+            return QColor(str(theme_dict)) if not isinstance(theme_dict, QColor) else theme_dict
         val = theme_dict.get(key, Tokens.FG_PRIMARY)
         if isinstance(val, QColor):
             return val

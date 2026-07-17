@@ -47,6 +47,10 @@ class CommandPalette(QDialog):
 
         self.update_list("")
 
+    def update_actions(self, actions):
+        self.all_actions = actions
+        self.update_list(self.search_input.text())
+
     def update_list(self, filter_text):
         self.action_list.clear()
         filter_text = filter_text.lower()

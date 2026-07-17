@@ -25,8 +25,8 @@ class UniversalHighlighter(QSyntaxHighlighter):
         self.rules = []
         
         # --- Shared Patterns ---
-        # Strings: double quotes, single quotes, and triple quotes (Python)
-        string_pattern = r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\''
+        # Strings: triple quotes first, then single/double
+        string_pattern = r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\''
         
         # Numbers: Floats, Hex, Octal, Binary, Decimals
         number_pattern = r'\b(?:0x[\da-fA-F]+|0b[01]+|0o[0-7]+|\d*\.\d+(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+)?)\b'

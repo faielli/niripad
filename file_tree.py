@@ -13,6 +13,9 @@ class FileTree(QWidget):
     fileOpened = pyqtSignal(str)
     fileCreated = pyqtSignal(str)
     folderCreated = pyqtSignal(str)
+    file_renamed = pyqtSignal(str, str)
+    file_deleted = pyqtSignal(str)
+    permission_denied = pyqtSignal(str)
 
     def __init__(self, initial_path=None):
         super().__init__()
@@ -80,6 +83,7 @@ class FileTree(QWidget):
         try:
             entries = os.listdir(path)
         except PermissionError:
+            self.permission_denied.emit(path)
             return
 
         if _visited is None:
@@ -224,13 +228,19 @@ class FileTree(QWidget):
     def _create_new_item(self, is_folder):
         name, ok = QInputDialog.getText(self, "New " + ("Folder" if is_folder else "File"), "Name:")
         if ok and name:
-            full_path = os.path.join(self.current_root, name)
+            parent_path = self.current_root
+            selected = self.tree.selectedItems()
+            if selected:
+                sel_path = selected[0].data(0, Qt.ItemDataRole.UserRole)
+                if sel_path:
+                    parent_path = sel_path if os.path.isdir(sel_path) else os.path.dirname(sel_path)
+            full_path = os.path.join(parent_path, name)
             try:
                 if is_folder:
                     os.makedirs(full_path, exist_ok=True)
                     self.folderCreated.emit(full_path)
                 else:
-                    with open(full_path, 'w') as f:
+                    with open(full_path, 'w', encoding='utf-8') as f:
                         pass
                     self.fileCreated.emit(full_path)
                 self._populate(self.current_root)
@@ -255,6 +265,7 @@ class FileTree(QWidget):
                     return
             try:
                 shutil.move(old_path, new_path)
+                self.file_renamed.emit(old_path, new_path)
                 self._populate(self.current_root)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not rename: {e}")
@@ -279,6 +290,7 @@ class FileTree(QWidget):
                     shutil.rmtree(path)
                 else:
                     os.remove(path)
+                self.file_deleted.emit(path)
                 self._populate(self.current_root)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not delete: {e}")

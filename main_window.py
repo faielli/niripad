@@ -4,6 +4,10 @@ import time
 import subprocess
 import hashlib
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QFileDialog, QMessageBox,
     QMenu, QMenuBar, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -32,6 +36,7 @@ class GitBranchWorker(QObject):
             self.finished.emit(result.stdout.strip())
         except Exception:
             self.finished.emit("")
+from functools import partial
 from editor_tab import EditorTab
 from search_dialog import SearchPanel, GoToLinePanel
 from file_tree import FileTree
@@ -102,6 +107,7 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self.config_manager = ConfigManager()
+        self.config_manager.bindings_changed.connect(self._create_menu)
 
         # Status icons
         self.status_icons = self._create_file_status_icons()
@@ -115,6 +121,9 @@ class MainWindow(QMainWindow):
 
         self.file_tree = FileTree(os.getcwd())
         self.file_tree.fileOpened.connect(self.open_file)
+        self.file_tree.file_renamed.connect(self._on_file_renamed)
+        self.file_tree.file_deleted.connect(self._on_file_deleted)
+        self.file_tree.permission_denied.connect(self._on_permission_denied)
         self.file_tree.setMinimumWidth(200)
 
         # Sidebar Content (header + file tree)
@@ -281,6 +290,7 @@ class MainWindow(QMainWindow):
         sidebar_shortcut.activated.connect(self.toggle_sidebar)
         
         self._cursor_editor = None
+        self._last_active_tab = None
         self._setup_statusbar()
         self._create_menu()
 
@@ -361,6 +371,8 @@ class MainWindow(QMainWindow):
         self.zoom_label.mousePressEvent = lambda e: self._reset_zoom() if e.button() == Qt.MouseButton.LeftButton else super(type(self.zoom_label), self.zoom_label).mousePressEvent(e)
         
         # Connections
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs_right.currentChanged.connect(self._on_tab_changed)
         self.tabs.currentChanged.connect(self._update_statusbar)
         self.tabs_right.currentChanged.connect(self._update_statusbar)
         
@@ -382,15 +394,16 @@ class MainWindow(QMainWindow):
             if self._cursor_editor is not None:
                 try:
                     self._cursor_editor.cursorPositionChanged.disconnect(self._update_cursor_pos)
-                except TypeError:
+                except (TypeError, RuntimeError):
+                    pass
+                try:
+                    self._cursor_editor.viewport().removeEventFilter(self)
+                except (TypeError, RuntimeError):
                     pass
             editor.cursorPositionChanged.connect(self._update_cursor_pos)
+            editor.viewport().installEventFilter(self)
             self._cursor_editor = editor
         self._update_cursor_pos()
-
-        # Install zoom handler on viewport
-        current_tab.editor.viewport().removeEventFilter(self) if hasattr(current_tab.editor, 'viewport') else None
-        current_tab.editor.viewport().installEventFilter(self)
 
         # Update status items from config
         cfg = self.config_manager
@@ -407,6 +420,13 @@ class MainWindow(QMainWindow):
             return
         cursor = current_tab.editor.textCursor()
         self.line_col_label.setText(f"Ln {cursor.blockNumber() + 1}, Col {cursor.columnNumber() + 1}")
+
+    def _on_tab_changed(self, index):
+        if self._last_active_tab and self.search_panel.maximumHeight() == 0:
+            self._last_active_tab.clear_highlights()
+        tw = self.sender()
+        if tw is not None and index >= 0:
+            self._last_active_tab = tw.widget(index)
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.Wheel and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -479,40 +499,52 @@ class MainWindow(QMainWindow):
             left_tab = self.tabs.currentWidget()
             if left_tab:
                 right_tab = EditorTab(left_tab.file_path, pane='right')
-                right_tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
+                right_tab.pane_activated.connect(self._on_pane_activated)
                 right_tab.set_theme(self.config_manager.get("theme", "lilac"))
                 right_tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
                 right_tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
                 right_tab.editor.set_show_margin(self.show_margin_action.isChecked())
                 if left_tab.file_path:
                     right_tab.load_file(left_tab.file_path)
+                    if right_tab._load_error:
+                        QMessageBox.warning(self, "Split Editor",
+                            f"Could not open file in new pane:\n{left_tab.file_path}\n\nError: {right_tab._load_error}")
+                        right_tab.deleteLater()
+                        return
                 else:
                     right_tab.editor._loading = True
                     right_tab.editor.setPlainText(left_tab.editor.toPlainText())
                     right_tab.editor._loading = False
                 index = tw.addTab(right_tab, right_tab.get_title())
                 tw.setCurrentIndex(index)
-                right_tab.modified_changed.connect(
-                    lambda modified, tab=right_tab: self._update_tab_title_pane('right', tw.indexOf(tab))
-                )
+                self._connect_tab_signals(right_tab, 'right', tw)
                 self.add_close_button_to('right', index)
             self._active_pane = 'right'
             self.split_action.setText("Unsplit Editor")
             self.split_action.setIcon(ico.compress_alt())
         else:
             # --- UNSPLIT: move all right tabs to left ---
+            modified_right = any(
+                tw.widget(i).is_modified() for i in range(tw.count())
+            )
+            if modified_right:
+                ret = QMessageBox.question(
+                    self, "Unsaved Changes",
+                    "There are unsaved changes in the right pane. Moving tabs will lose undo history. Continue?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if ret != QMessageBox.StandardButton.Yes:
+                    return
             while tw.count() > 0:
                 tab = tw.widget(0)
                 try:
                     tab.modified_changed.disconnect()
-                except TypeError:
+                except (TypeError, RuntimeError):
                     pass
                 tw.removeTab(0)
                 tab._pane = 'left'
                 idx = self.tabs.addTab(tab, tab.get_title())
-                tab.modified_changed.connect(
-                    lambda modified, tab=tab: self._update_tab_title_pane('left', self.tabs.indexOf(tab))
-                )
+                self._connect_tab_signals(tab, 'left', self.tabs)
                 self.add_close_button_to('left', idx)
                 self.tabs.setCurrentIndex(idx)
             tw.hide()
@@ -535,11 +567,14 @@ class MainWindow(QMainWindow):
             tw.setTabText(index, title)
             tw.setTabIcon(index, self.status_icons["saved"])
 
-    def _make_close_cb(self, pane, idx):
-        return lambda: self.close_tab(idx, pane)
+    def _make_close_cb(self, tw, tab):
+        return lambda: self.close_tab(tw.indexOf(tab), 'left' if tw is self.tabs else 'right')
 
     def add_close_button_to(self, pane, index):
         tw = self.tabs if pane == 'left' else self.tabs_right
+        tab = tw.widget(index)
+        if not tab:
+            return
         close_btn = QPushButton()
         close_btn.setIcon(Icons(Tokens.ICON_ACTIVE).close())
         close_btn.setIconSize(QSize(12, 12))
@@ -547,7 +582,7 @@ class MainWindow(QMainWindow):
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setAccessibleName("Close tab")
         close_btn.setFlat(True)
-        close_btn.clicked.connect(self._make_close_cb(pane, index))
+        close_btn.clicked.connect(self._make_close_cb(tw, tab))
         tw.tabBar().setTabButton(index, QTabBar.ButtonPosition(1), close_btn)
 
     def toggle_word_wrap(self):
@@ -601,6 +636,13 @@ class MainWindow(QMainWindow):
             tab.editor.reset_zoom()
             self.zoom_label.setText("100%")
 
+    def _zoom_active_editor(self, delta):
+        tab = self._active_tab_widget().currentWidget()
+        if tab:
+            new_level = max(50, min(200, tab.editor._zoom_level + delta))
+            tab.editor.set_zoom_level(new_level)
+            self.zoom_label.setText(f"{tab.editor._zoom_level}%")
+
     def _update_recent_menu(self):
         self.recent_menu.clear()
         recent = self.config_manager.get_recent_files()
@@ -611,7 +653,7 @@ class MainWindow(QMainWindow):
             return
         for path in recent:
             action = QAction(path, self)
-            action.triggered.connect(lambda checked, p=path: self.open_file(p))
+            action.triggered.connect(partial(self.open_file, path))
             self.recent_menu.addAction(action)
         self.recent_menu.addSeparator()
         clear_action = QAction("Clear Recent Files", self)
@@ -756,6 +798,23 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
+        zoom_in_action = QAction("Zoom In", self)
+        zoom_in_action.setShortcut(QKeySequence("Ctrl++"))
+        zoom_in_action.triggered.connect(lambda: self._zoom_active_editor(10))
+        view_menu.addAction(zoom_in_action)
+
+        zoom_out_action = QAction("Zoom Out", self)
+        zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
+        zoom_out_action.triggered.connect(lambda: self._zoom_active_editor(-10))
+        view_menu.addAction(zoom_out_action)
+
+        reset_zoom_action = QAction("Reset Zoom", self)
+        reset_zoom_action.setShortcut(QKeySequence("Ctrl+0"))
+        reset_zoom_action.triggered.connect(self._reset_zoom)
+        view_menu.addAction(reset_zoom_action)
+
+        view_menu.addSeparator()
+
         self.split_action = QAction("Split Editor", self)
         self.split_action.setIcon(ico.columns())
         self.split_action.setShortcut(QKeySequence("Ctrl+\\"))
@@ -780,6 +839,8 @@ class MainWindow(QMainWindow):
             for i in range(tw.count()):
                 tab = tw.widget(i)
                 if tab and tab.is_modified():
+                    if not tab.file_path and not tab.editor.toPlainText().strip():
+                        continue
                     try:
                         if tab.file_path:
                             tab.save_file()
@@ -788,7 +849,7 @@ class MainWindow(QMainWindow):
                             temp_path = os.path.join(cache_dir, f"Untitled_{prefix}{i}.txt")
                             tab.save_file(temp_path)
                     except Exception as e:
-                        print(f"Autosave failed for tab {i}: {e}")
+                        logger.error("Autosave failed for tab %d: %s", i, e)
 
         # Cleanup old autosave files (keep max 50, or younger than 7 days)
         try:
@@ -868,6 +929,9 @@ class MainWindow(QMainWindow):
                     if resolved in seen:
                         continue
                     seen.add(resolved)
+                    if not os.path.exists(resolved):
+                        logger.warning("Session restore: file not found, skipping: %s", resolved)
+                        continue
                     self.open_file(path)
                 elif unsaved_content is not None:
                     content_hash = hashlib.sha256(unsaved_content.encode()[:8192]).hexdigest()
@@ -875,7 +939,7 @@ class MainWindow(QMainWindow):
                         continue
                     seen_unsaved.add(content_hash)
                     tab = EditorTab(pane='left')
-                    tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
+                    tab.pane_activated.connect(self._on_pane_activated)
                     tab.set_theme(self.config_manager.get("theme", "lilac"))
                     index = self.tabs.addTab(tab, tab.get_title())
                     tab.editor._loading = True
@@ -883,7 +947,7 @@ class MainWindow(QMainWindow):
                     tab.editor._loading = False
                     tab._is_modified = True
                     tab.editor.document().setModified(True)
-                    tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane('left', self.tabs.indexOf(tab)))
+                    self._connect_tab_signals(tab, 'left', self.tabs)
                     self._update_tab_title_pane('left', index)
                     self.add_close_button_to('left', index)
         
@@ -896,6 +960,68 @@ class MainWindow(QMainWindow):
                 tab.editor.set_show_whitespace(view_settings.get("show_whitespace", False))
                 tab.editor.set_show_margin(view_settings.get("show_margin", True))
 
+        # Restore right pane tabs
+        right_tabs = session_data.get("tabs_right")
+        if right_tabs:
+            self.tabs_right.show()
+            seen_right = set()
+            seen_unsaved_right = set()
+            for tab_info in right_tabs:
+                path = tab_info.get("path")
+                unsaved_content = tab_info.get("unsaved_content")
+
+                if path:
+                    resolved = str(Path(path).resolve())
+                    if resolved in seen_right:
+                        continue
+                    seen_right.add(resolved)
+                    if not os.path.exists(resolved):
+                        logger.warning("Session restore: file not found, skipping: %s", resolved)
+                        continue
+                    tab = EditorTab(path, pane='right')
+                    if tab._load_error:
+                        logger.warning("Session restore: failed to load %s: %s", path, tab._load_error)
+                        tab.deleteLater()
+                        continue
+                    tab.pane_activated.connect(self._on_pane_activated)
+                    tab.set_theme(self.config_manager.get("theme", "lilac"))
+                    index = self.tabs_right.addTab(tab, tab.get_title())
+                    self.tabs_right.setCurrentIndex(index)
+                    tab.editor.set_word_wrap(view_settings.get("word_wrap", False))
+                    tab.editor.set_show_whitespace(view_settings.get("show_whitespace", False))
+                    tab.editor.set_show_margin(view_settings.get("show_margin", True))
+                    self._connect_tab_signals(tab, 'right', self.tabs_right)
+                    self._update_tab_title_pane('right', index)
+                    self.add_close_button_to('right', index)
+                elif unsaved_content is not None:
+                    content_hash = hashlib.sha256(unsaved_content.encode()[:8192]).hexdigest()
+                    if content_hash in seen_unsaved_right:
+                        continue
+                    seen_unsaved_right.add(content_hash)
+                    tab = EditorTab(pane='right')
+                    tab.pane_activated.connect(self._on_pane_activated)
+                    tab.set_theme(self.config_manager.get("theme", "lilac"))
+                    index = self.tabs_right.addTab(tab, tab.get_title())
+                    tab.editor._loading = True
+                    tab.editor.setPlainText(unsaved_content)
+                    tab.editor._loading = False
+                    tab._is_modified = True
+                    tab.editor.document().setModified(True)
+                    self._connect_tab_signals(tab, 'right', self.tabs_right)
+                    self._update_tab_title_pane('right', index)
+                    self.add_close_button_to('right', index)
+
+            for i in range(self.tabs_right.count()):
+                tab = self.tabs_right.widget(i)
+                if tab:
+                    tab.editor.set_word_wrap(view_settings.get("word_wrap", False))
+                    tab.editor.set_show_whitespace(view_settings.get("show_whitespace", False))
+                    tab.editor.set_show_margin(view_settings.get("show_margin", True))
+
+            e_sizes = session_data.get("editor_splitter_sizes")
+            if e_sizes:
+                self.editor_splitter.setSizes(e_sizes)
+
         current_index = session_data.get("current_index", 0)
         if current_index < self.tabs.count():
             self.tabs.setCurrentIndex(current_index)
@@ -905,14 +1031,14 @@ class MainWindow(QMainWindow):
         tw = self._active_tab_widget()
         pane = self._active_pane
         tab = EditorTab(pane=pane)
-        tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
+        tab.pane_activated.connect(self._on_pane_activated)
         tab.set_theme(self.config_manager.get("theme", "lilac"))
         index = tw.addTab(tab, tab.get_title())
         tw.setCurrentIndex(index)
         tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
         tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
         tab.editor.set_show_margin(self.show_margin_action.isChecked())
-        tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane(pane, tw.indexOf(tab)))
+        self._connect_tab_signals(tab, pane, tw)
         self.add_close_button_to(pane, index)
 
     def open_file(self, file_path=None):
@@ -921,7 +1047,7 @@ class MainWindow(QMainWindow):
 
         if file_path:
             if not os.path.exists(file_path):
-                print(f"File not found: {file_path}")
+                logger.warning("Open file failed: %s not found", file_path)
                 return
 
             tw = self._active_tab_widget()
@@ -937,14 +1063,19 @@ class MainWindow(QMainWindow):
                     return
 
             tab = EditorTab(file_path, pane=pane)
-            tab.pane_activated.connect(lambda p: setattr(self, '_active_pane', p))
+            if tab._load_error:
+                QMessageBox.warning(self, "Open File",
+                    f"Could not open file:\n{file_path}\n\nError: {tab._load_error}")
+                tab.deleteLater()
+                return
+            tab.pane_activated.connect(self._on_pane_activated)
             tab.set_theme(self.config_manager.get("theme", "lilac"))
             index = tw.addTab(tab, tab.get_title())
             tw.setCurrentIndex(index)
             tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
             tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
             tab.editor.set_show_margin(self.show_margin_action.isChecked())
-            tab.modified_changed.connect(lambda modified, tab=tab: self._update_tab_title_pane(pane, tw.indexOf(tab)))
+            self._connect_tab_signals(tab, pane, tw)
             self.add_close_button_to(pane, index)
             self.config_manager.add_recent_file(str(resolved))
             self._update_recent_menu()
@@ -998,10 +1129,44 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.show_save_error(e, file_path)
 
+    def _find_tabs_by_path(self, file_path):
+        resolved = Path(file_path).resolve()
+        tabs = []
+        for pane, tw in (('left', self.tabs), ('right', self.tabs_right)):
+            for i in range(tw.count()):
+                tab = tw.widget(i)
+                if tab.file_path and Path(tab.file_path).resolve() == resolved:
+                    tabs.append((pane, i, tab))
+        return tabs
+
+    def _on_file_renamed(self, old_path, new_path):
+        for pane, index, tab in self._find_tabs_by_path(old_path):
+            tab.file_path = new_path
+            tw = self.tabs if pane == 'left' else self.tabs_right
+            self._update_tab_title_pane(pane, tw.indexOf(tab))
+
+    def _on_file_deleted(self, path):
+        for pane, index, tab in self._find_tabs_by_path(path):
+            self.close_tab(index, pane)
+
+    def _on_permission_denied(self, path):
+        QMessageBox.warning(self, "Permission Denied",
+                            f"Cannot access folder:\n{path}\n\nPermission denied.")
+
+    def _on_pane_activated(self, pane):
+        self._active_pane = pane
+
+    def _connect_tab_signals(self, tab, pane, tw):
+        tab.modified_changed.connect(
+            lambda modified, tab=tab, pane=pane, tw=tw: self._update_tab_title_pane(pane, tw.indexOf(tab))
+        )
+
     def close_tab(self, index, pane='left'):
         tw = self.tabs if pane == 'left' else self.tabs_right
         tab = tw.widget(index)
-        if tab and tab.is_modified():
+        if not tab:
+            return
+        if tab.is_modified():
             ret = QMessageBox.question(
                 self, "Save Changes?", 
                 f"The file {tab.get_title()} has been modified. Do you want to save it?",
@@ -1017,6 +1182,27 @@ class MainWindow(QMainWindow):
                 return
 
         tw.removeTab(index)
+
+        try:
+            tab.clear_highlights()
+        except (TypeError, RuntimeError):
+            pass
+
+        try:
+            tab.modified_changed.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            tab.pane_activated.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            tab.editor.textChanged.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        if tab.editor is self._cursor_editor:
+            self._cursor_editor = None
+        tab.deleteLater()
 
         if pane == 'right':
             if self.tabs_right.count() == 0:
@@ -1049,14 +1235,13 @@ class MainWindow(QMainWindow):
 
         target_tw.insertTab(target_index, tab, tab.get_title())
         target_tw.setCurrentIndex(target_index)
+        tab._pane = target_pane
 
         try:
             tab.modified_changed.disconnect()
-        except TypeError:
+        except (TypeError, RuntimeError):
             pass
-        tab.modified_changed.connect(
-            lambda modified, t=tab: self._update_tab_title_pane(target_pane, target_tw.indexOf(t))
-        )
+        self._connect_tab_signals(tab, target_pane, target_tw)
 
         self.add_close_button_to(target_pane, target_index)
 
@@ -1110,10 +1295,23 @@ class MainWindow(QMainWindow):
             self.tabs.setTabIcon(index, self.status_icons["saved"])
 
     def closeEvent(self, event):
+        # Stop git threads
+        for thread, worker in self._git_workers:
+            if thread.isRunning():
+                thread.quit()
+                thread.wait(2000)
+        self._git_workers.clear()
+
         # Final autosave
-        self._do_autosave()
+        try:
+            self._do_autosave()
+        except Exception as e:
+            logger.error("Autosave on close failed: %s", e)
         # Save session
-        self._save_session()
+        try:
+            self._save_session()
+        except Exception as e:
+            logger.error("Session save on close failed: %s", e)
 
         for tw, pane in [(self.tabs, 'left'), (self.tabs_right, 'right')]:
             for i in range(tw.count() - 1, -1, -1):
@@ -1165,12 +1363,16 @@ class MainWindow(QMainWindow):
         self._search_anim.start()
 
     def show_command_palette(self):
+        commands = dict(self.commands)
+        recent_files = self.config_manager.get("recent_files", [])
+        for i, f in enumerate(recent_files[:10]):
+            commands[f"open_recent_{i}"] = f"Open: {f}"
+        self.command_palette.update_actions(commands)
         self.command_palette.show()
 
     def show_keybindings_dialog(self):
         dialog = KeybindingsDialog(self.config_manager, self)
-        if dialog.exec():
-            self._create_menu()
+        dialog.exec()
 
     def handle_find(self, text, case_sensitive, is_regex, forward=True):
         current_tab = self._active_tab_widget().currentWidget()
@@ -1358,6 +1560,11 @@ class MainWindow(QMainWindow):
             self.handle_redo()
         elif command_id == "command_palette":
             self.show_command_palette()
+        elif command_id.startswith("open_recent_"):
+            path = self.config_manager.get("recent_files", [])
+            idx = int(command_id.split("_")[-1])
+            if idx < len(path):
+                self.open_file(path[idx])
         elif command_id == "goto_line":
             self.show_goto_line()
 
