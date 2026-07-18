@@ -9,9 +9,9 @@ dist/
 .aider*
 .idea/
 .idea*
-.opencodeignore/*
-.opencode/*
-.codegraph/*
+.opencodeignore/
+.opencode/
+.codegraph/
 *.tar.gz
 src/
 pkg/
