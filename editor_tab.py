@@ -506,16 +506,20 @@ class CustomEditor(QPlainTextEdit):
         self.update_sidebar_area()
 
     def update_sidebar_area(self):
+        cr = self.contentsRect()
         ln_width = self.line_number_width()
         fold_width = self.folding_area_width()
-        
-        self.lineNumberArea.setGeometry(QRect(0, 0, ln_width, self.height()))
-        self.foldingArea.setGeometry(QRect(ln_width, 0, fold_width, self.height()))
+
+        self.lineNumberArea.setGeometry(
+            QRect(cr.left(), cr.top(), ln_width, cr.height()))
+        self.foldingArea.setGeometry(
+            QRect(cr.left() + ln_width, cr.top(), fold_width, cr.height()))
 
         if self._show_margin:
             metrics = QFontMetrics(self.font())
-            margin_x = ln_width + fold_width + metrics.horizontalAdvance('9') * self._margin_column
-            self.marginLine.setGeometry(QRect(margin_x, 0, 2, self.height()))
+            margin_x = cr.left() + ln_width + fold_width + \
+                        metrics.horizontalAdvance('9') * self._margin_column
+            self.marginLine.setGeometry(QRect(margin_x, cr.top(), 2, cr.height()))
             self.marginLine.show()
         else:
             self.marginLine.hide()
@@ -682,8 +686,8 @@ class CustomEditor(QPlainTextEdit):
     def updateRequest(self, rect, dy):
         super().updateRequest(rect, dy)
         if dy:
-            self.lineNumberArea.scroll(0, dy)
-            self.foldingArea.scroll(0, dy)
+            self.lineNumberArea.update()
+            self.foldingArea.update()
         else:
             sidebar_width = self.line_number_width() + self.folding_area_width()
             if rect.contains(QRect(0, 0, sidebar_width, self.height())):
