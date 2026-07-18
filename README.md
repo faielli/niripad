@@ -106,7 +106,7 @@ niripad/
 |---|---|
 | UI Framework | PyQt6 |
 | Language | Python 3.11+ |
-| Theme | Catppuccin Mocha |
+| Theme | Lilac |
 | Font | JetBrains Mono |
 | Icons | qtawesome |
 | Compositor | Niri (Wayland) |
