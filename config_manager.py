@@ -45,7 +45,9 @@ class ConfigManager(QObject):
         "undo": "Ctrl+Z",
         "redo": "Ctrl+Y",
         "command_palette": "Ctrl+Shift+P",
-        "goto_line": "Ctrl+G"
+        "goto_line": "Ctrl+G",
+        "toggle_terminal": "Ctrl+\\",
+        "toggle_split": "Ctrl+Shift+\\"
     }
 
     def __init__(self):

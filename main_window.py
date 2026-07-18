@@ -260,9 +260,11 @@ class MainWindow(QMainWindow):
         self.editor_layout.addWidget(self.terminal_widget)
 
         # Terminal toggle shortcut
-        terminal_shortcut = QShortcut(QKeySequence("Ctrl+\\"), self)
-        terminal_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-        terminal_shortcut.activated.connect(self.toggle_terminal)
+        self._terminal_shortcut = QShortcut(QKeySequence(
+            self.config_manager.get_binding("toggle_terminal")
+        ), self)
+        self._terminal_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self._terminal_shortcut.activated.connect(self.toggle_terminal)
 
         # Editor Area (no toggle — just the editor container)
         self.editor_area = QWidget()
@@ -843,9 +845,15 @@ class MainWindow(QMainWindow):
 
         self.split_action = QAction("Split Editor", self)
         self.split_action.setIcon(ico.columns())
-        self.split_action.setShortcut(QKeySequence("Ctrl+Shift+\\"))
+        self.split_action.setShortcut(QKeySequence(self.config_manager.get_binding("toggle_split")))
         self.split_action.triggered.connect(self.split_editor)
         view_menu.addAction(self.split_action)
+
+        view_menu.addSeparator()
+
+        terminal_action = QAction("Toggle Terminal\tCtrl+\\", self)
+        terminal_action.triggered.connect(self.toggle_terminal)
+        view_menu.addAction(terminal_action)
 
         # Restore View settings from session
         session_data = self.config_manager.load_session()
@@ -854,6 +862,10 @@ class MainWindow(QMainWindow):
         self.word_wrap_action.setChecked(view_settings.get("word_wrap", False))
         self.show_whitespace_action.setChecked(view_settings.get("show_whitespace", False))
         self.show_margin_action.setChecked(view_settings.get("show_margin", True))
+
+        self._terminal_shortcut.setKey(
+            QKeySequence(self.config_manager.get_binding("toggle_terminal"))
+        )
 
     def _start_autosave_timer(self):
         self.autosave_timer = QTimer(self)

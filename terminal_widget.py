@@ -29,7 +29,7 @@ class ResizeHandle(QWidget):
         if self._press_y is None:
             return
         delta = event.globalPosition().y() - self._press_y
-        new_h = max(80, min(600, self._terminal.height() + delta))
+        new_h = int(max(80, min(600, self._terminal.height() - delta)))
         self._terminal.setFixedHeight(new_h)
         self._press_y = event.globalPosition().y()
 
@@ -80,13 +80,13 @@ class TerminalWidget(QWidget):
         clear_btn.clicked.connect(self.clear_output)
         header_layout.addWidget(clear_btn)
 
-        kill_btn = QPushButton()
-        kill_btn.setIcon(icons.close())
-        kill_btn.setToolTip("Kill process")
-        kill_btn.setFlat(True)
-        kill_btn.setFixedSize(24, 24)
-        kill_btn.clicked.connect(self.kill_process)
-        header_layout.addWidget(kill_btn)
+        collapse_btn = QPushButton()
+        collapse_btn.setIcon(icons.chevron_down())
+        collapse_btn.setToolTip("Hide terminal (Ctrl+\\)")
+        collapse_btn.setFlat(True)
+        collapse_btn.setFixedSize(24, 24)
+        collapse_btn.clicked.connect(self._collapse)
+        header_layout.addWidget(collapse_btn)
 
         layout.addWidget(header)
 
@@ -136,6 +136,14 @@ class TerminalWidget(QWidget):
         else:
             return
         self._cwd_label.setText(self._cwd)
+
+    def _collapse(self):
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'toggle_terminal'):
+                parent.toggle_terminal()
+                return
+            parent = parent.parent()
 
     def focus_input(self):
         self._input.setFocus()
