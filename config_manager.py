@@ -47,7 +47,7 @@ class ConfigManager(QObject):
         "command_palette": "Ctrl+Shift+P",
         "goto_line": "Ctrl+G",
         "toggle_terminal": "Ctrl+\\",
-        "toggle_split": "Ctrl+Shift+\\"
+        "toggle_split": "Ctrl+Alt+S"
     }
 
     def __init__(self):
