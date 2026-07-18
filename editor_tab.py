@@ -83,7 +83,8 @@ class CodeFoldingArea(QWidget):
         
         block = self.editor.firstVisibleBlock()
         block_number = block.blockNumber()
-        top = round(self.editor.blockBoundingGeometry(block).translated(0, -self.editor.verticalScrollBar().value()).top())
+        offset = self.editor.contentOffset()
+        top = round(self.editor.blockBoundingGeometry(block).translated(offset).top())
         bottom = top + round(self.editor.blockBoundingRect(block).height())
 
         while block.isValid() and top <= event.rect().bottom():
@@ -711,7 +712,8 @@ class CustomEditor(QPlainTextEdit):
         
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
-        top = round(self.blockBoundingGeometry(block).translated(0, -self.verticalScrollBar().value()).top())
+        offset = self.contentOffset()
+        top = round(self.blockBoundingGeometry(block).translated(offset).top())
         bottom = top + round(self.blockBoundingRect(block).height())
 
         line_fg = Theme.get_color(self._theme_dict, "line_number_fg")
