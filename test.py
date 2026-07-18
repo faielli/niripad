@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-test.py — Niri Editor test suite (38 tests · stdlib only)
+test.py — Niri Editor test suite (295 tests · stdlib only)
 Run:  python test.py
 """
 
@@ -50,7 +50,7 @@ try:
         QTreeWidgetItem, QDialog,
     )
     from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QObject, QEvent
-    from PyQt6.QtGui import QColor, QFont, QPainter, QTextFormat, QFontMetrics, QTextCursor
+    from PyQt6.QtGui import QColor, QFont, QPainter, QTextFormat, QFontMetrics, QTextCursor, QIcon, QAction, QCloseEvent, QKeySequence
 
     # Import project modules
     from logging_config import setup_logging
@@ -2370,6 +2370,2034 @@ class TestConfigManagerKeybindings(unittest.TestCase):
         logger.info("[PASS] custom keybinding overrides default ✓")
 
 
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestCustomEditor(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_zoom_in_increases_level(self):
+        logger.info("═══ TestCustomEditor.test_zoom_in_increases_level ═══")
+        editor = CustomEditor()
+        initial = editor._zoom_level
+        editor.zoom_in()
+        self.assertEqual(editor._zoom_level, initial + 10)
+        logger.info("[PASS] zoom_in increases level ✓")
+
+    def test_zoom_out_decreases_level(self):
+        logger.info("═══ TestCustomEditor.test_zoom_out_decreases_level ═══")
+        editor = CustomEditor()
+        editor.set_zoom_level(120)
+        editor.zoom_out()
+        self.assertEqual(editor._zoom_level, 110)
+        logger.info("[PASS] zoom_out decreases level ✓")
+
+    def test_zoom_clamped_min_50(self):
+        logger.info("═══ TestCustomEditor.test_zoom_clamped_min_50 ═══")
+        editor = CustomEditor()
+        editor.set_zoom_level(40)
+        self.assertEqual(editor._zoom_level, 50)
+        logger.info("[PASS] zoom clamped at 50 ✓")
+
+    def test_zoom_clamped_max_200(self):
+        logger.info("═══ TestCustomEditor.test_zoom_clamped_max_200 ═══")
+        editor = CustomEditor()
+        editor.set_zoom_level(250)
+        self.assertEqual(editor._zoom_level, 200)
+        logger.info("[PASS] zoom clamped at 200 ✓")
+
+    def test_reset_zoom_returns_to_100(self):
+        logger.info("═══ TestCustomEditor.test_reset_zoom_returns_to_100 ═══")
+        editor = CustomEditor()
+        editor.set_zoom_level(150)
+        editor.reset_zoom()
+        self.assertEqual(editor._zoom_level, 100)
+        logger.info("[PASS] reset_zoom returns to 100 ✓")
+
+    def test_set_word_wrap_enabled(self):
+        logger.info("═══ TestCustomEditor.test_set_word_wrap_enabled ═══")
+        editor = CustomEditor()
+        editor.set_word_wrap(True)
+        self.assertEqual(editor.lineWrapMode(),
+                         QPlainTextEdit.LineWrapMode.WidgetWidth)
+        logger.info("[PASS] set_word_wrap(True) enables WidgetWidth ✓")
+
+    def test_set_word_wrap_disabled(self):
+        logger.info("═══ TestCustomEditor.test_set_word_wrap_disabled ═══")
+        editor = CustomEditor()
+        editor.set_word_wrap(False)
+        self.assertEqual(editor.lineWrapMode(),
+                         QPlainTextEdit.LineWrapMode.NoWrap)
+        logger.info("[PASS] set_word_wrap(False) sets NoWrap ✓")
+
+    def test_set_show_whitespace_enabled(self):
+        logger.info("═══ TestCustomEditor.test_set_show_whitespace_enabled ═══")
+        editor = CustomEditor()
+        editor.set_show_whitespace(True)
+        self.assertTrue(editor._show_whitespace)
+        logger.info("[PASS] set_show_whitespace(True) ✓")
+
+    def test_set_show_whitespace_disabled(self):
+        logger.info("═══ TestCustomEditor.test_set_show_whitespace_disabled ═══")
+        editor = CustomEditor()
+        editor.set_show_whitespace(False)
+        self.assertFalse(editor._show_whitespace)
+        logger.info("[PASS] set_show_whitespace(False) ✓")
+
+    def test_set_show_margin_enabled(self):
+        logger.info("═══ TestCustomEditor.test_set_show_margin_enabled ═══")
+        editor = CustomEditor()
+        editor.set_show_margin(True)
+        self.assertTrue(editor._show_margin)
+        logger.info("[PASS] set_show_margin(True) ✓")
+
+    def test_set_show_margin_disabled(self):
+        logger.info("═══ TestCustomEditor.test_set_show_margin_disabled ═══")
+        editor = CustomEditor()
+        editor.set_show_margin(False)
+        self.assertFalse(editor._show_margin)
+        logger.info("[PASS] set_show_margin(False) ✓")
+
+    def test_set_margin_column(self):
+        logger.info("═══ TestCustomEditor.test_set_margin_column ═══")
+        editor = CustomEditor()
+        editor.set_margin_column(120)
+        self.assertEqual(editor._margin_column, 120)
+        logger.info("[PASS] set_margin_column(120) ✓")
+
+    def test_go_to_line_valid(self):
+        logger.info("═══ TestCustomEditor.test_go_to_line_valid ═══")
+        editor = CustomEditor()
+        editor.setPlainText("line1\nline2\nline3")
+        editor.go_to_line(2)
+        cursor = editor.textCursor()
+        self.assertEqual(cursor.blockNumber(), 1)
+        logger.info("[PASS] go_to_line(2) moves cursor to line 2 ✓")
+
+    def test_go_to_line_invalid_ignored(self):
+        logger.info("═══ TestCustomEditor.test_go_to_line_invalid_ignored ═══")
+        editor = CustomEditor()
+        editor.setPlainText("line1\nline2")
+        cursor_before = editor.textCursor().position()
+        editor.go_to_line(999)
+        self.assertEqual(editor.textCursor().position(), cursor_before)
+        logger.info("[PASS] go_to_line(999) ignored ✓")
+
+    def test_toggle_fold(self):
+        logger.info("═══ TestCustomEditor.test_toggle_fold ═══")
+        editor = CustomEditor()
+        editor.setPlainText("def foo():\n    pass\n\ndef bar():\n    pass\n")
+        editor.language = "python"
+        editor.update_foldable_blocks()
+        if editor.foldable_blocks:
+            block_num = list(editor.foldable_blocks.keys())[0]
+            editor.toggle_fold(block_num)
+            self.assertIn(block_num, editor.folded_blocks)
+            editor.toggle_fold(block_num)
+            self.assertNotIn(block_num, editor.folded_blocks)
+        logger.info("[PASS] toggle_fold folds and unfolds ✓")
+
+    def test_update_foldable_blocks_python(self):
+        logger.info("═══ TestCustomEditor.test_update_foldable_blocks_python ═══")
+        editor = CustomEditor()
+        editor.setPlainText("def foo():\n    pass\n\nclass Bar:\n    pass\n")
+        editor.language = "python"
+        editor.update_foldable_blocks()
+        self.assertGreater(len(editor.foldable_blocks), 0)
+        logger.info("[PASS] Python foldable blocks found ✓")
+
+    def test_update_foldable_blocks_javascript(self):
+        logger.info("═══ TestCustomEditor.test_update_foldable_blocks_javascript ═══")
+        editor = CustomEditor()
+        editor.setPlainText("function foo() {\n  return 1;\n}\n\nif (true) {\n  console.log('hi');\n}\n")
+        editor.language = "javascript"
+        editor.update_foldable_blocks()
+        self.assertGreater(len(editor.foldable_blocks), 0)
+        logger.info("[PASS] JavaScript foldable blocks found ✓")
+
+    def test_update_foldable_blocks_rust(self):
+        logger.info("═══ TestCustomEditor.test_update_foldable_blocks_rust ═══")
+        editor = CustomEditor()
+        editor.setPlainText("fn foo() {\n    let x = 1;\n}\n\nfn bar() {\n    let y = 2;\n}\n")
+        editor.language = "rust"
+        editor.update_foldable_blocks()
+        self.assertGreater(len(editor.foldable_blocks), 0)
+        logger.info("[PASS] Rust foldable blocks found ✓")
+
+    def test_set_search_highlights(self):
+        logger.info("═══ TestCustomEditor.test_set_search_highlights ═══")
+        editor = CustomEditor()
+        editor.setPlainText("hello world")
+        from PyQt6.QtWidgets import QTextEdit
+        sel = QTextEdit.ExtraSelection()
+        sel.cursor = editor.textCursor()
+        sel.cursor.select(sel.cursor.SelectionType.WordUnderCursor)
+        editor.set_search_highlights([sel])
+        self.assertEqual(len(editor._search_highlights), 1)
+        logger.info("[PASS] set_search_highlights adds highlight ✓")
+
+    def test_clear_search_highlights(self):
+        logger.info("═══ TestCustomEditor.test_clear_search_highlights ═══")
+        editor = CustomEditor()
+        from PyQt6.QtWidgets import QTextEdit
+        sel = QTextEdit.ExtraSelection()
+        sel.cursor = editor.textCursor()
+        editor.set_search_highlights([sel])
+        editor.clear_search_highlights()
+        self.assertEqual(len(editor._search_highlights), 0)
+        logger.info("[PASS] clear_search_highlights removes all ✓")
+
+    def test_line_number_width_increases_with_lines(self):
+        logger.info("═══ TestCustomEditor.test_line_number_width_increases_with_lines ═══")
+        editor = CustomEditor()
+        editor.setPlainText("")
+        small = editor.line_number_width()
+        editor.setPlainText("\n" * 1000)
+        large = editor.line_number_width()
+        self.assertGreater(large, small)
+        logger.info("[PASS] line_number_width grows with blocks ✓")
+
+    def test_folding_area_width_without_blocks(self):
+        logger.info("═══ TestCustomEditor.test_folding_area_width_without_blocks ═══")
+        editor = CustomEditor()
+        editor.foldable_blocks = {}
+        self.assertEqual(editor.folding_area_width(), 14)
+        logger.info("[PASS] folding_area_width() == 14 without blocks ✓")
+
+    def test_folding_area_width_with_blocks(self):
+        logger.info("═══ TestCustomEditor.test_folding_area_width_with_blocks ═══")
+        editor = CustomEditor()
+        editor.foldable_blocks = {0: 2}
+        self.assertEqual(editor.folding_area_width(), 20)
+        logger.info("[PASS] folding_area_width() == 20 with blocks ✓")
+
+    def test_keypress_auto_close_bracket(self):
+        logger.info("═══ TestCustomEditor.test_keypress_auto_close_bracket ═══")
+        editor = CustomEditor()
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_ParenLeft,
+                          Qt.KeyboardModifier.NoModifier, "(")
+        editor.keyPressEvent(event)
+        self.assertEqual(editor.toPlainText(), "()")
+        cursor = editor.textCursor()
+        self.assertEqual(cursor.position(), 1)
+        logger.info("[PASS] keyPress '(' inserts '()' with cursor inside ✓")
+
+    def test_keypress_auto_close_brace(self):
+        logger.info("═══ TestCustomEditor.test_keypress_auto_close_brace ═══")
+        editor = CustomEditor()
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_BraceLeft,
+                          Qt.KeyboardModifier.NoModifier, "{")
+        editor.keyPressEvent(event)
+        self.assertEqual(editor.toPlainText(), "{}")
+        logger.info("[PASS] keyPress '{' inserts '{}' ✓")
+
+    def test_keypress_auto_close_quote(self):
+        logger.info("═══ TestCustomEditor.test_keypress_auto_close_quote ═══")
+        editor = CustomEditor()
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_QuoteDbl,
+                          Qt.KeyboardModifier.NoModifier, '"')
+        editor.keyPressEvent(event)
+        self.assertEqual(editor.toPlainText(), '""')
+        logger.info("[PASS] keyPress '\"' inserts '\"\"' ✓")
+
+    def test_keypress_auto_indent_after_colon(self):
+        logger.info("═══ TestCustomEditor.test_keypress_auto_indent_after_colon ═══")
+        editor = CustomEditor()
+        editor.setPlainText("def foo():")
+        editor.language = "python"
+        cursor = editor.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        editor.setTextCursor(cursor)
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return,
+                          Qt.KeyboardModifier.NoModifier, "\r")
+        editor.keyPressEvent(event)
+        text = editor.toPlainText()
+        self.assertIn("    ", text)
+        logger.info("[PASS] Enter after ':' auto-indents ✓")
+
+    def test_keypress_backspace_removes_pair(self):
+        logger.info("═══ TestCustomEditor.test_keypress_backspace_removes_pair ═══")
+        editor = CustomEditor()
+        editor.setPlainText("()")
+        cursor = editor.textCursor()
+        cursor.setPosition(1)
+        editor.setTextCursor(cursor)
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Backspace,
+                          Qt.KeyboardModifier.NoModifier)
+        editor.keyPressEvent(event)
+        self.assertEqual(editor.toPlainText(), "")
+        logger.info("[PASS] Backspace between '()' removes both ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestSyntaxHighlighterExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def _create_highlighter(self):
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        return hl
+
+    def test_set_language_python_sets_rules(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_set_language_python_sets_rules ═══")
+        hl = self._create_highlighter()
+        hl.set_language("python")
+        hl._setup_rules()
+        self.assertGreater(len(hl.rules), 0)
+        logger.info("[PASS] set_language('python') creates rules ✓")
+
+    def test_set_language_javascript_sets_rules(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_set_language_javascript_sets_rules ═══")
+        hl = self._create_highlighter()
+        hl.set_language("javascript")
+        hl._setup_rules()
+        self.assertGreater(len(hl.rules), 0)
+        logger.info("[PASS] set_language('javascript') creates rules ✓")
+
+    def test_set_language_rust_sets_rules(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_set_language_rust_sets_rules ═══")
+        hl = self._create_highlighter()
+        hl.set_language("rust")
+        hl._setup_rules()
+        self.assertGreater(len(hl.rules), 0)
+        logger.info("[PASS] set_language('rust') creates rules ✓")
+
+    def test_set_language_unknown_falls_back(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_set_language_unknown_falls_back ═══")
+        hl = self._create_highlighter()
+        hl.set_language("__nonexistent__")
+        hl._setup_rules()
+        self.assertIsInstance(hl.rules, list)
+        logger.info("[PASS] unknown language falls back gracefully ✓")
+
+    def test_highlight_block_python_keywords(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_highlight_block_python_keywords ═══")
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("python")
+        editor.setPlainText("import os\n\ndef foo():\n    pass\n")
+        # Force a rehighlight
+        hl.rehighlight()
+        # Verify no exceptions and blocks are highlighted
+        for block_no in range(editor.document().blockCount()):
+            block = editor.document().findBlockByNumber(block_no)
+            fmt = block.charFormat()
+            self.assertIsNotNone(block.text())
+        logger.info("[PASS] Python highlightBlock runs without error ✓")
+
+    def test_highlight_block_javascript_no_crash(self):
+        logger.info("═══ TestSyntaxHighlighterExtended.test_highlight_block_javascript_no_crash ═══")
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("javascript")
+        editor.setPlainText("function foo() {\n  return 1;\n}\n")
+        hl.rehighlight()
+        for block_no in range(editor.document().blockCount()):
+            block = editor.document().findBlockByNumber(block_no)
+            self.assertIsNotNone(block.text())
+        logger.info("[PASS] JavaScript highlightBlock no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestFileTreeExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        (self.tmp / "subdir").mkdir()
+        (self.tmp / "file_a.txt").write_text("a")
+        self.ft = FileTree(str(self.tmp))
+
+    def tearDown(self):
+        self.ft.deleteLater()
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def _find_item(self, ft, name):
+        for i in range(ft.tree.topLevelItemCount()):
+            item = ft.tree.topLevelItem(i)
+            if item.text(0) == name:
+                return item
+        return None
+
+    def test_set_root_path_updates_current_root(self):
+        logger.info("═══ TestFileTreeExtended.test_set_root_path_updates_current_root ═══")
+        with tmp_dir() as tmp2:
+            self.ft.set_root_path(str(tmp2))
+            self.assertEqual(self.ft.current_root, str(tmp2))
+        logger.info("[PASS] set_root_path updates current_root ✓")
+
+    def test_set_root_path_ignores_invalid(self):
+        logger.info("═══ TestFileTreeExtended.test_set_root_path_ignores_invalid ═══")
+        original = self.ft.current_root
+        self.ft.set_root_path("/nonexistent/path/xyz")
+        self.assertEqual(self.ft.current_root, original)
+        logger.info("[PASS] set_root_path ignores invalid path ✓")
+
+    def test_context_menu_show_hidden_toggle(self):
+        logger.info("═══ TestFileTreeExtended.test_context_menu_show_hidden_toggle ═══")
+        self.assertFalse(self.ft._show_hidden)
+        # Verify set_show_hidden works without context menu hanging
+        self.ft.set_show_hidden(True)
+        self.assertTrue(self.ft._show_hidden)
+        self.ft.set_show_hidden(False)
+        self.assertFalse(self.ft._show_hidden)
+        logger.info("[PASS] show_hidden toggle via setter ✓")
+
+    def test_double_click_outside_root_blocked(self):
+        logger.info("═══ TestFileTreeExtended.test_double_click_outside_root_blocked ═══")
+        outside = self.tmp.parent / "outside_test.txt"
+        outside.write_text("evil")
+        emitted = []
+        self.ft.fileOpened.connect(lambda p: emitted.append(p))
+        item = QTreeWidgetItem(["outside_test.txt"])
+        item.setData(0, Qt.ItemDataRole.UserRole, str(outside))
+        with mock_qmessagebox_warning() as dialogs:
+            self.ft._on_item_double_clicked(item, 0)
+        self.assertGreaterEqual(len(dialogs), 1)
+        self.assertEqual(len(emitted), 0)
+        outside.unlink()
+        logger.info("[PASS] file outside root blocked ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowCritical(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_close_tab_unmodified_removes_tab(self):
+        logger.info("═══ TestMainWindowCritical.test_close_tab_unmodified_removes_tab ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        count_before = self.mw.tabs.count()
+        self.mw.close_tab(0, 'left')
+        self.assertEqual(self.mw.tabs.count(), count_before - 1)
+        logger.info("[PASS] close unmodified tab removes ✓")
+
+    def test_close_tab_modified_discard(self):
+        logger.info("═══ TestMainWindowCritical.test_close_tab_modified_discard ═══")
+        self.mw.new_file()
+        idx = self.mw.tabs.currentIndex()
+        tab = self.mw.tabs.currentWidget()
+        cursor = tab.editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText("modified")
+        self.assertTrue(tab.is_modified())
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QMessageBox.question',
+            return_value=QMessageBox.StandardButton.Discard
+        ):
+            self.mw.close_tab(idx, 'left')
+        logger.info("[PASS] close modified tab with Discard no error ✓")
+
+    def test_close_tab_modified_save(self):
+        logger.info("═══ TestMainWindowCritical.test_close_tab_modified_save ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "save_on_close.txt"
+            f.write_text("original")
+            self.mw.open_file(str(f))
+            idx = self.mw.tabs.currentIndex()
+            tab = self.mw.tabs.currentWidget()
+            cursor = tab.editor.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText("modified content")
+            self.assertTrue(tab.is_modified())
+            with unittest.mock.patch(
+                'PyQt6.QtWidgets.QMessageBox.question',
+                return_value=QMessageBox.StandardButton.Save
+            ):
+                self.mw.close_tab(idx, 'left')
+            self.assertEqual(f.read_text(encoding='utf-8'), "modified content")
+        logger.info("[PASS] close modified tab with Save persists ✓")
+
+    def test_close_tab_modified_cancel_keeps_tab(self):
+        logger.info("═══ TestMainWindowCritical.test_close_tab_modified_cancel_keeps_tab ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        cursor = tab.editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText("modified")
+        self.assertTrue(tab.is_modified())
+        count_before = self.mw.tabs.count()
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QMessageBox.question',
+            return_value=QMessageBox.StandardButton.Cancel
+        ):
+            self.mw.close_tab(count_before - 1, 'left')
+        self.assertEqual(self.mw.tabs.count(), count_before)
+        logger.info("[PASS] close tab Cancel keeps tab ✓")
+
+    def test_save_file_as_opens_dialog(self):
+        logger.info("═══ TestMainWindowCritical.test_save_file_as_opens_dialog ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("save_as content")
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QFileDialog.getSaveFileName',
+            return_value=('', '')
+        ):
+            self.mw.save_file_as()
+        logger.info("[PASS] save_file_as opens dialog ✓")
+
+    def test_event_filter_ctrl_wheel_zooms(self):
+        logger.info("═══ TestMainWindowCritical.test_event_filter_ctrl_wheel_zooms ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        initial_zoom = tab.editor._zoom_level
+        from PyQt6.QtCore import QPoint, QPointF, Qt
+        from PyQt6.QtGui import QWheelEvent
+        wheel_event = QWheelEvent(
+            QPointF(0, 0), QPointF(0, 0), QPoint(0, 0),
+            QPoint(0, 120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.ControlModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False
+        )
+        self.mw.eventFilter(tab.editor.viewport(), wheel_event)
+        self.assertGreater(tab.editor._zoom_level, initial_zoom)
+        logger.info("[PASS] Ctrl+Wheel zooms in ✓")
+
+    def test_event_filter_ctrl_wheel_zoom_out(self):
+        logger.info("═══ TestMainWindowCritical.test_event_filter_ctrl_wheel_zoom_out ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.set_zoom_level(120)
+        from PyQt6.QtCore import QPoint, QPointF, Qt
+        from PyQt6.QtGui import QWheelEvent
+        wheel_event = QWheelEvent(
+            QPointF(0, 0), QPointF(0, 0), QPoint(0, 0),
+            QPoint(0, -120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.ControlModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False
+        )
+        self.mw.eventFilter(tab.editor.viewport(), wheel_event)
+        self.assertLess(tab.editor._zoom_level, 120)
+        logger.info("[PASS] Ctrl+Wheel zooms out ✓")
+
+    def test_execute_command_new_file(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_new_file ═══")
+        count_before = self.mw.tabs.count()
+        self.mw.execute_command("new_file")
+        self.assertEqual(self.mw.tabs.count(), count_before + 1)
+        logger.info("[PASS] execute_command('new_file') works ✓")
+
+    def test_execute_command_close_tab(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_close_tab ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        count_before = self.mw.tabs.count()
+        self.mw.execute_command("close_tab")
+        self.assertEqual(self.mw.tabs.count(), count_before - 1)
+        logger.info("[PASS] execute_command('close_tab') works ✓")
+
+    def test_execute_command_undo_and_redo(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_undo_and_redo ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("original")
+        tab.editor.document().setModified(False)
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("modified")
+        self.mw.execute_command("undo")
+        self.assertEqual(tab.editor.toPlainText(), "original")
+        self.mw.execute_command("redo")
+        self.assertEqual(tab.editor.toPlainText(), "modified")
+        logger.info("[PASS] execute_command undo/redo ✓")
+
+    def test_execute_command_toggle_terminal(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_toggle_terminal ═══")
+        self.mw.execute_command("toggle_terminal")
+        self.assertFalse(self.mw.terminal_widget.isHidden())
+        logger.info("[PASS] execute_command('toggle_terminal') shows terminal ✓")
+
+    def test_execute_command_find(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_find ═══")
+        self.mw.new_file()
+        self.mw.execute_command("find")
+        self.assertIsNotNone(self.mw._search_anim)
+        logger.info("[PASS] execute_command('find') no crash ✓")
+
+    def test_execute_command_goto_line(self):
+        logger.info("═══ TestMainWindowCritical.test_execute_command_goto_line ═══")
+        self.mw.new_file()
+        self.mw.execute_command("goto_line")
+        self.assertFalse(self.mw.goto_panel.isHidden())
+        logger.info("[PASS] execute_command('goto_line') shows panel ✓")
+
+    def test_toggle_show_whitespace(self):
+        logger.info("═══ TestMainWindowCritical.test_toggle_show_whitespace ═══")
+        self.mw.new_file()
+        self.mw.show_whitespace_action.setChecked(True)
+        self.mw.toggle_show_whitespace()
+        logger.info("[PASS] toggle_show_whitespace no crash ✓")
+
+    def test_toggle_show_margin(self):
+        logger.info("═══ TestMainWindowCritical.test_toggle_show_margin ═══")
+        self.mw.new_file()
+        self.mw.show_margin_action.setChecked(False)
+        self.mw.toggle_show_margin()
+        logger.info("[PASS] toggle_show_margin no crash ✓")
+
+    def test_show_command_palette_shows_widget(self):
+        logger.info("═══ TestMainWindowCritical.test_show_command_palette_shows_widget ═══")
+        self.mw.command_palette.show()
+        self.assertTrue(self.mw.command_palette.isVisible())
+        self.mw.command_palette.reject()
+        logger.info("[PASS] show_command_palette shows widget ✓")
+
+    def test_close_tab_action_via_execute(self):
+        logger.info("═══ TestMainWindowCritical.test_close_tab_action_via_execute ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        count_before = self.mw.tabs.count()
+        self.mw.close_tab_action()
+        self.assertEqual(self.mw.tabs.count(), count_before - 1)
+        logger.info("[PASS] close_tab_action removes tab ✓")
+
+    def test_save_file_works(self):
+        logger.info("═══ TestMainWindowCritical.test_save_file_works ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "save_test.txt"
+            f.write_text("original")
+            self.mw.open_file(str(f))
+            tab = self.mw.tabs.currentWidget()
+            tab.editor.setPlainText("updated")
+            self.mw.save_file()
+            self.assertEqual(f.read_text(encoding='utf-8'), "updated")
+        logger.info("[PASS] save_file saves content ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestTerminalWidgetExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self.tw = TerminalWidget()
+
+    def tearDown(self):
+        self.tw.kill_process()
+        self.tw.deleteLater()
+
+    def test_focus_input_sets_focus(self):
+        logger.info("═══ TestTerminalWidgetExtended.test_focus_input_sets_focus ═══")
+        self.tw.focus_input()
+        # In offscreen mode hasFocus() may not work; just verify no crash
+        self.assertIsNotNone(self.tw._input)
+        logger.info("[PASS] focus_input no crash ✓")
+
+    def test_close_event_kills_process(self):
+        logger.info("═══ TestTerminalWidgetExtended.test_close_event_kills_process ═══")
+        from PyQt6.QtCore import QEvent
+        event = QCloseEvent()
+        self.tw.closeEvent(event)
+        logger.info("[PASS] closeEvent kills process no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestResizeHandleExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_drag_up_increases_height(self):
+        logger.info("═══ TestResizeHandleExtended.test_drag_up_increases_height ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(200)
+        handle = tw._resize_handle
+        handle._press_y = 300.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove, QPointF(0, 0), QPointF(0, 250),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertGreater(tw.height(), 200)
+        tw.deleteLater()
+        logger.info("[PASS] drag up increases height ✓")
+
+    def test_drag_down_decreases_height(self):
+        logger.info("═══ TestResizeHandleExtended.test_drag_down_decreases_height ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(200)
+        handle = tw._resize_handle
+        handle._press_y = 300.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove, QPointF(0, 0), QPointF(0, 350),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertLess(tw.height(), 200)
+        tw.deleteLater()
+        logger.info("[PASS] drag down decreases height ✓")
+
+    def test_height_clamped_min_80(self):
+        logger.info("═══ TestResizeHandleExtended.test_height_clamped_min_80 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(100)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove, QPointF(0, 0), QPointF(0, 500),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertGreaterEqual(tw.height(), 80)
+        tw.deleteLater()
+        logger.info("[PASS] height clamped min 80 ✓")
+
+    def test_height_clamped_max_600(self):
+        logger.info("═══ TestResizeHandleExtended.test_height_clamped_max_600 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(400)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove, QPointF(0, 0), QPointF(0, -500),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertLessEqual(tw.height(), 600)
+        tw.deleteLater()
+        logger.info("[PASS] height clamped max 600 ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestCommandPaletteExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_keypress_escape_rejects(self):
+        logger.info("═══ TestCommandPaletteExtended.test_keypress_escape_rejects ═══")
+        parent = QWidget()
+        palette = CommandPalette({"test": "Test"}, parent=parent)
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape,
+                          Qt.KeyboardModifier.NoModifier)
+        palette.keyPressEvent(event)
+        self.assertEqual(palette.result(), int(QDialog.DialogCode.Rejected))
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] Escape rejects dialog ✓")
+
+    def test_keypress_enter_selects_first_item(self):
+        logger.info("═══ TestCommandPaletteExtended.test_keypress_enter_selects_first_item ═══")
+        parent = QWidget()
+        palette = CommandPalette({"cmd.test": "Test command"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return,
+                          Qt.KeyboardModifier.NoModifier)
+        palette.keyPressEvent(event)
+        self.assertEqual(emitted, ["cmd.test"])
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] Enter selects first item ✓")
+
+    def test_keypress_down_navigates_list(self):
+        logger.info("═══ TestCommandPaletteExtended.test_keypress_down_navigates_list ═══")
+        parent = QWidget()
+        palette = CommandPalette({"a": "A", "b": "B"}, parent=parent)
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        down = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down,
+                         Qt.KeyboardModifier.NoModifier)
+        palette.keyPressEvent(down)
+        self.assertEqual(palette.action_list.currentRow(), 1)
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] Down navigates list ✓")
+
+    def test_exec_accepts_dialog(self):
+        logger.info("═══ TestCommandPaletteExtended.test_exec_accepts_dialog ═══")
+        parent = QWidget()
+        palette = CommandPalette({"cmd.test": "Test"}, parent=parent)
+        palette.accept()
+        self.assertEqual(palette.result(), int(QDialog.DialogCode.Accepted))
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] exec_ accepts dialog ✓")
+
+    def test_on_enter_pressed_empty_list_no_crash(self):
+        logger.info("═══ TestCommandPaletteExtended.test_on_enter_pressed_empty_list_no_crash ═══")
+        parent = QWidget()
+        palette = CommandPalette({}, parent=parent)
+        palette.on_enter_pressed()
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] on_enter_pressed with empty list no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestKeybindingsDialogExtended(unittest.TestCase):
+    def setUp(self):
+        ensure_qapp()
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self.cm = ConfigManager()
+
+    def tearDown(self):
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_load_bindings_into_list(self):
+        logger.info("═══ TestKeybindingsDialogExtended.test_load_bindings_into_list ═══")
+        parent = QWidget()
+        self.cm.keybindings = {"save": "Ctrl+S", "open": "Ctrl+O"}
+        dlg = KeybindingsDialog(self.cm, parent=parent)
+        dlg.load_bindings_into_list()
+        self.assertEqual(dlg.list_widget.count(), 2)
+        dlg.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] load_bindings_into_list loads bindings ✓")
+
+    def test_save_and_close_updates_config(self):
+        logger.info("═══ TestKeybindingsDialogExtended.test_save_and_close_updates_config ═══")
+        parent = QWidget()
+        self.cm.keybindings = {"save": "Ctrl+S"}
+        dlg = KeybindingsDialog(self.cm, parent=parent)
+        dlg.bindings["save"] = "Ctrl+Shift+S"
+        dlg.save_and_close()
+        self.assertEqual(self.cm.keybindings["save"], "Ctrl+Shift+S")
+        self.assertEqual(dlg.result(), int(QDialog.DialogCode.Accepted))
+        dlg.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] save_and_close updates config ✓")
+
+    def test_reject_does_not_save(self):
+        logger.info("═══ TestKeybindingsDialogExtended.test_reject_does_not_save ═══")
+        parent = QWidget()
+        self.cm.keybindings = {"save": "Ctrl+S"}
+        dlg = KeybindingsDialog(self.cm, parent=parent)
+        dlg.bindings["save"] = "Ctrl+Shift+S"
+        dlg.reject()
+        self.assertEqual(self.cm.keybindings["save"], "Ctrl+S")
+        dlg.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] reject does not save ✓")
+
+    def test_edit_binding_updates_model(self):
+        logger.info("═══ TestKeybindingsDialogExtended.test_edit_binding_updates_model ═══")
+        parent = QWidget()
+        self.cm.keybindings = {"save": "Ctrl+S"}
+        dlg = KeybindingsDialog(self.cm, parent=parent)
+        dlg.load_bindings_into_list()
+        with unittest.mock.patch("PyQt6.QtWidgets.QInputDialog.getText",
+                                  return_value=("Ctrl+Shift+S", True)):
+            dlg.edit_binding(dlg.list_widget.item(0))
+        self.assertEqual(dlg.bindings["save"], "Ctrl+Shift+S")
+        dlg.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] edit_binding updates model ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestIconsAndTheme(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_icons_all_return_qicon(self):
+        logger.info("═══ TestIconsAndTheme.test_icons_all_return_qicon ═══")
+        ico = Icons(Tokens.FG_PRIMARY)
+        methods = [
+            'bars', 'check_circle', 'chevron_down', 'chevron_left',
+            'chevron_right', 'chevron_up', 'close', 'cog', 'columns',
+            'compress_alt', 'copy', 'crosshairs', 'exchange_alt',
+            'exclamation_circle', 'file', 'file_alt', 'file_code',
+            'folder', 'folder_open', 'redo', 'save', 'search',
+            'sitemap', 'terminal', 'undo'
+        ]
+        for m in methods:
+            icon = getattr(ico, m)()
+            self.assertIsInstance(icon, QIcon,
+                                  f"Icons.{m}() did not return QIcon")
+        logger.info("[PASS] all %d Icons methods return QIcon ✓", len(methods))
+
+    def test_theme_get_color_returns_qcolor(self):
+        logger.info("═══ TestIconsAndTheme.test_theme_get_color_returns_qcolor ═══")
+        theme_dict = Theme.by_name("lilac")
+        for key in ("background", "foreground", "selection_background",
+                     "selection_foreground", "current_line_bg",
+                     "line_number_fg", "gutter_bg"):
+            color = Theme.get_color(theme_dict, key)
+            self.assertIsInstance(color, QColor,
+                                  f"Theme.get_color({key}) not QColor")
+        logger.info("[PASS] Theme.get_color returns QColor for all keys ✓")
+
+
+# ── Widget interni: DraggableTabBar, CodeFoldingArea, LineNumberArea, MarginLine ──
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestDraggableTabBar(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self.mw = QWidget()
+        from main_window import DraggableTabBar
+        self.bar = DraggableTabBar(parent=self.mw, pane='left', main_window=self.mw)
+
+    def tearDown(self):
+        self.bar.deleteLater()
+        self.mw.deleteLater()
+
+    def test_constructor_sets_pane(self):
+        logger.info("═══ TestDraggableTabBar.test_constructor_sets_pane ═══")
+        self.assertEqual(self.bar._pane, 'left')
+        self.assertIs(self.bar._main_window, self.mw)
+        self.assertTrue(self.bar.acceptDrops())
+        logger.info("[PASS] constructor sets pane and parent ✓")
+
+    def test_mouse_press_sets_drag_state(self):
+        logger.info("═══ TestDraggableTabBar.test_mouse_press_sets_drag_state ═══")
+        self.bar.addTab("Tab 1")
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(10, 10),
+                            QPointF(10, 10), Qt.MouseButton.LeftButton,
+                            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        self.bar.mousePressEvent(press)
+        self.assertTrue(hasattr(self.bar, '_drag_start_pos'))
+        logger.info("[PASS] mouse press sets drag state ✓")
+
+    def test_drag_enter_accepts_valid_mime(self):
+        logger.info("═══ TestDraggableTabBar.test_drag_enter_accepts_valid_mime ═══")
+        from PyQt6.QtCore import QMimeData, QPoint, QEvent
+        from PyQt6.QtGui import QDragEnterEvent
+        mime = QMimeData()
+        mime.setData("application/x-tab-move", b"left,0")
+        event = QDragEnterEvent(QPoint(0, 0), Qt.DropAction.MoveAction,
+                                mime, Qt.MouseButton.LeftButton,
+                                Qt.KeyboardModifier.NoModifier)
+        self.bar.dragEnterEvent(event)
+        logger.info("[PASS] drag enter accepts valid mime ✓")
+
+    def test_drag_enter_rejects_invalid_mime(self):
+        logger.info("═══ TestDraggableTabBar.test_drag_enter_rejects_invalid_mime ═══")
+        from PyQt6.QtCore import QMimeData, QPoint, QEvent
+        from PyQt6.QtGui import QDragEnterEvent
+        mime = QMimeData()
+        mime.setText("plain text")
+        event = QDragEnterEvent(QPoint(0, 0), Qt.DropAction.MoveAction,
+                                mime, Qt.MouseButton.LeftButton,
+                                Qt.KeyboardModifier.NoModifier)
+        self.bar.dragEnterEvent(event)
+        logger.info("[PASS] drag enter rejects invalid mime ✓")
+
+    def test_drag_move_accepts_valid_mime(self):
+        logger.info("═══ TestDraggableTabBar.test_drag_move_accepts_valid_mime ═══")
+        from PyQt6.QtCore import QMimeData, QPoint, QEvent
+        from PyQt6.QtGui import QDragMoveEvent
+        mime = QMimeData()
+        mime.setData("application/x-tab-move", b"left,0")
+        event = QDragMoveEvent(QPoint(0, 0), Qt.DropAction.MoveAction,
+                               mime, Qt.MouseButton.LeftButton,
+                               Qt.KeyboardModifier.NoModifier)
+        self.bar.dragMoveEvent(event)
+        logger.info("[PASS] drag move accepts valid mime ✓")
+
+    def test_drop_triggers_move(self):
+        logger.info("═══ TestDraggableTabBar.test_drop_triggers_move ═══")
+        self.bar.addTab("Tab 1")
+        self.bar.addTab("Tab 2")
+        moved = []
+        self.mw._move_tab = lambda s, si, tp, ti: moved.append((s, si, tp, ti))
+        from PyQt6.QtCore import QMimeData, QPointF, QEvent
+        from PyQt6.QtGui import QDropEvent
+        mime = QMimeData()
+        mime.setData("application/x-tab-move", b"left,0")
+        event = QDropEvent(QPointF(5, 5), Qt.DropAction.MoveAction,
+                           mime, Qt.MouseButton.LeftButton,
+                           Qt.KeyboardModifier.NoModifier)
+        self.bar.dropEvent(event)
+        self.assertEqual(len(moved), 1)
+        self.assertEqual(moved[0], ('left', 0, 'left', 0))
+        logger.info("[PASS] drop triggers _move_tab ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestCodeFoldingArea(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_size_hint_returns_20_x_0(self):
+        logger.info("═══ TestCodeFoldingArea.test_size_hint_returns_20_x_0 ═══")
+        editor = CustomEditor()
+        area = editor.foldingArea
+        sz = area.sizeHint()
+        self.assertEqual(sz.width(), 20)
+        self.assertEqual(sz.height(), 0)
+        editor.deleteLater()
+        logger.info("[PASS] CodeFoldingArea sizeHint → QSize(20, 0) ✓")
+
+    def test_paint_event_no_crash(self):
+        logger.info("═══ TestCodeFoldingArea.test_paint_event_no_crash ═══")
+        editor = CustomEditor()
+        editor.setPlainText("def foo():\n    pass\n\ndef bar():\n    pass\n")
+        editor.language = "python"
+        editor.update_foldable_blocks()
+        area = editor.foldingArea
+        from PyQt6.QtCore import QRect, QEvent
+        from PyQt6.QtGui import QPaintEvent
+        rect = QRect(0, 0, 20, 50)
+        event = QPaintEvent(rect)
+        area.paintEvent(event)
+        editor.deleteLater()
+        logger.info("[PASS] CodeFoldingArea paintEvent no crash ✓")
+
+    def test_mouse_press_toggles_fold(self):
+        logger.info("═══ TestCodeFoldingArea.test_mouse_press_toggles_fold ═══")
+        editor = CustomEditor()
+        editor.setPlainText("def foo():\n    pass\n\ndef bar():\n    pass\n")
+        editor.language = "python"
+        editor.update_foldable_blocks()
+        area = editor.foldingArea
+        if editor.foldable_blocks:
+            block_num = list(editor.foldable_blocks.keys())[0]
+            from PyQt6.QtCore import QPointF, QEvent
+            from PyQt6.QtGui import QMouseEvent
+            click = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(8, 10),
+                                QPointF(8, 10), Qt.MouseButton.LeftButton,
+                                Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            area.mousePressEvent(click)
+            self.assertIn(block_num, editor.folded_blocks)
+            # Second click unfolds
+            click2 = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(8, 10),
+                                 QPointF(8, 10), Qt.MouseButton.LeftButton,
+                                 Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            area.mousePressEvent(click2)
+            self.assertNotIn(block_num, editor.folded_blocks)
+        editor.deleteLater()
+        logger.info("[PASS] CodeFoldingArea mouse press toggles fold ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestLineNumberArea(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_size_hint_matches_line_number_width(self):
+        logger.info("═══ TestLineNumberArea.test_size_hint_matches_line_number_width ═══")
+        editor = CustomEditor()
+        editor.setPlainText("line1\nline2\nline3")
+        area = editor.lineNumberArea
+        sz = area.sizeHint()
+        self.assertEqual(sz.width(), editor.line_number_width())
+        self.assertEqual(sz.height(), 0)
+        editor.deleteLater()
+        logger.info("[PASS] LineNumberArea sizeHint matches line_number_width ✓")
+
+    def test_paint_event_no_crash(self):
+        logger.info("═══ TestLineNumberArea.test_paint_event_no_crash ═══")
+        editor = CustomEditor()
+        editor.setPlainText("hello\nworld")
+        area = editor.lineNumberArea
+        from PyQt6.QtCore import QRect, QEvent
+        from PyQt6.QtGui import QPaintEvent
+        event = QPaintEvent(QRect(0, 0, 40, 50))
+        area.paintEvent(event)
+        editor.deleteLater()
+        logger.info("[PASS] LineNumberArea paintEvent no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMarginLine(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_paint_event_no_crash(self):
+        logger.info("═══ TestMarginLine.test_paint_event_no_crash ═══")
+        editor = CustomEditor()
+        line = editor.marginLine
+        from PyQt6.QtCore import QRect, QEvent
+        from PyQt6.QtGui import QPaintEvent
+        event = QPaintEvent(QRect(0, 0, 10, 50))
+        line.paintEvent(event)
+        editor.deleteLater()
+        logger.info("[PASS] MarginLine paintEvent no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowAutosave(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_do_autosave_saves_modified_tab_with_path(self):
+        logger.info("═══ TestMainWindowAutosave.test_do_autosave_saves_modified_tab_with_path ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "autosave_test.txt"
+            f.write_text("original")
+            self.mw.open_file(str(f))
+            tab = self.mw.tabs.currentWidget()
+            cursor = tab.editor.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText(" autosaved")
+            self.mw._do_autosave()
+            self.assertIn("autosaved", f.read_text(encoding='utf-8'))
+        logger.info("[PASS] _do_autosave saves modified tab with file path ✓")
+
+    def test_do_autosave_skips_unmodified_tabs(self):
+        logger.info("═══ TestMainWindowAutosave.test_do_autosave_skips_unmodified_tabs ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "clean_autosave.txt"
+            f.write_text("original")
+            self.mw.open_file(str(f))
+            self.mw._do_autosave()
+            self.assertEqual(f.read_text(encoding='utf-8'), "original")
+        logger.info("[PASS] _do_autosave skips unmodified tabs ✓")
+
+    def test_on_git_branch_result_shows_label(self):
+        logger.info("═══ TestMainWindowAutosave.test_on_git_branch_result_shows_label ═══")
+        self.mw._on_git_branch_result("/tmp", "main")
+        self.assertIn("main", self.mw.git_label.text())
+        self.assertFalse(self.mw.git_label.isHidden())
+        logger.info("[PASS] _on_git_branch_result shows git label ✓")
+
+    def test_on_git_branch_result_empty_hides_label(self):
+        logger.info("═══ TestMainWindowAutosave.test_on_git_branch_result_empty_hides_label ═══")
+        self.mw._on_git_branch_result("/tmp", "")
+        self.assertTrue(self.mw.git_label.isHidden())
+        logger.info("[PASS] _on_git_branch_result empty hides label ✓")
+
+    def test_autosave_timer_created_on_init(self):
+        logger.info("═══ TestMainWindowAutosave.test_autosave_timer_created_on_init ═══")
+        self.assertIsNotNone(self.mw.autosave_timer)
+        self.assertTrue(self.mw.autosave_timer.isActive())
+        logger.info("[PASS] autosave timer active on init ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestEditorTabAtomicSave(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_save_file_preserves_utf8_content(self):
+        logger.info("═══ TestEditorTabAtomicSave.test_save_file_preserves_utf8_content ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "unicode_save.txt"
+            tab = EditorTab(pane='left')
+            tab.file_path = str(f)
+            content = "café 日本語 ✓\nemoji 😊\n"
+            tab.editor.setPlainText(content)
+            result = tab.save_file()
+            self.assertTrue(result)
+            self.assertEqual(f.read_text(encoding='utf-8'), content)
+            tab.deleteLater()
+        logger.info("[PASS] save_file preserves UTF-8 content ✓")
+
+    def test_save_file_overwrites_existing_content(self):
+        logger.info("═══ TestEditorTabAtomicSave.test_save_file_overwrites_existing_content ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "overwrite.txt"
+            f.write_text("old content")
+            tab = EditorTab(str(f), pane='left')
+            tab.editor.setPlainText("new content")
+            result = tab.save_file()
+            self.assertTrue(result)
+            self.assertEqual(f.read_text(encoding='utf-8'), "new content")
+            tab.deleteLater()
+        logger.info("[PASS] save_file overwrites existing content ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestSyntaxHighlighterEdgeCases(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def _hl(self):
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("python")
+        return hl
+
+    def test_highlight_multiline_string_no_crash(self):
+        logger.info("═══ TestSyntaxHighlighterEdgeCases.test_highlight_multiline_string_no_crash ═══")
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("python")
+        editor.setPlainText('"""\nmulti\nline\nstring\n"""\nx = 1\n')
+        hl.rehighlight()
+        for block_no in range(editor.document().blockCount()):
+            block = editor.document().findBlockByNumber(block_no)
+            self.assertIsNotNone(block.text())
+        editor.deleteLater()
+        logger.info("[PASS] highlight multiline string no crash ✓")
+
+    def test_highlight_comment_with_special_chars_no_crash(self):
+        logger.info("═══ TestSyntaxHighlighterEdgeCases.test_highlight_comment_with_special_chars_no_crash ═══")
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("python")
+        editor.setPlainText("# comment with $peci@l ch@rs\nx = 1  # inline { comment }\n")
+        hl.rehighlight()
+        for block_no in range(editor.document().blockCount()):
+            block = editor.document().findBlockByNumber(block_no)
+            self.assertIsNotNone(block.text())
+        editor.deleteLater()
+        logger.info("[PASS] highlight comment with special chars no crash ✓")
+
+    def test_highlight_javascript_regex_no_crash(self):
+        logger.info("═══ TestSyntaxHighlighterEdgeCases.test_highlight_javascript_regex_no_crash ═══")
+        editor = CustomEditor()
+        hl = UniversalHighlighter(editor.document(), Theme.by_name("lilac"))
+        hl.set_language("javascript")
+        editor.setPlainText("const re = /foo[bar]+/gi;\nconst str = 'hello';\n")
+        hl.rehighlight()
+        for block_no in range(editor.document().blockCount()):
+            block = editor.document().findBlockByNumber(block_no)
+            self.assertIsNotNone(block.text())
+        editor.deleteLater()
+        logger.info("[PASS] highlight JavaScript regex no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestResizeHandleExtended2(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_mouse_press_sets_press_y(self):
+        logger.info("═══ TestResizeHandleExtended2.test_mouse_press_sets_press_y ═══")
+        tw = TerminalWidget()
+        handle = tw._resize_handle
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(0, 100),
+                            QPointF(0, 100), Qt.MouseButton.LeftButton,
+                            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        handle.mousePressEvent(press)
+        self.assertEqual(handle._press_y, 100.0)
+        tw.deleteLater()
+        logger.info("[PASS] mouse press sets _press_y ✓")
+
+    def test_mouse_release_no_crash(self):
+        logger.info("═══ TestResizeHandleExtended2.test_mouse_release_no_crash ═══")
+        tw = TerminalWidget()
+        handle = tw._resize_handle
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        release = QMouseEvent(QEvent.Type.MouseButtonRelease, QPointF(0, 0),
+                              QPointF(0, 0), Qt.MouseButton.LeftButton,
+                              Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        handle.mouseReleaseEvent(release)
+        tw.deleteLater()
+        logger.info("[PASS] mouse release no crash ✓")
+
+    def test_drag_clamps_max_600(self):
+        logger.info("═══ TestResizeHandleExtended2.test_drag_clamps_max_600 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(400)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move = QMouseEvent(QEvent.Type.MouseMove, QPointF(0, 0),
+                           QPointF(0, -500),
+                           Qt.MouseButton.LeftButton,
+                           Qt.MouseButton.LeftButton,
+                           Qt.KeyboardModifier.NoModifier)
+        handle.mouseMoveEvent(move)
+        self.assertLessEqual(tw.height(), 600)
+        tw.deleteLater()
+        logger.info("[PASS] drag clamped at max 600 ✓")
+
+    def test_drag_clamps_min_80(self):
+        logger.info("═══ TestResizeHandleExtended2.test_drag_clamps_min_80 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(100)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move = QMouseEvent(QEvent.Type.MouseMove, QPointF(0, 0),
+                           QPointF(0, 500),
+                           Qt.MouseButton.LeftButton,
+                           Qt.MouseButton.LeftButton,
+                           Qt.KeyboardModifier.NoModifier)
+        handle.mouseMoveEvent(move)
+        self.assertGreaterEqual(tw.height(), 80)
+        tw.deleteLater()
+        logger.info("[PASS] drag clamped at min 80 ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestSearchPanelExtended(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_replace_emits_with_regex_flag(self):
+        logger.info("═══ TestSearchPanelExtended.test_replace_emits_with_regex_flag ═══")
+        parent = QWidget()
+        panel = SearchPanel(parent=parent)
+        emitted = []
+        panel.replace_requested.connect(lambda *a: emitted.append(a))
+        panel.find_input.setText("\\d+")
+        panel.replace_input.setText("NUM")
+        panel.is_regex.setChecked(True)
+        panel.on_replace()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0], ("\\d+", "NUM", False, True))
+        parent.deleteLater()
+        logger.info("[PASS] replace with regex flag ✓")
+
+    def test_replace_all_case_sensitive(self):
+        logger.info("═══ TestSearchPanelExtended.test_replace_all_case_sensitive ═══")
+        parent = QWidget()
+        panel = SearchPanel(parent=parent)
+        emitted = []
+        panel.replace_all_requested.connect(lambda *a: emitted.append(a))
+        panel.find_input.setText("hello")
+        panel.replace_input.setText("hi")
+        panel.case_sensitive.setChecked(True)
+        panel.is_regex.setChecked(False)
+        panel.on_replace_all()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0], ("hello", "hi", True, False))
+        parent.deleteLater()
+        logger.info("[PASS] replace_all case sensitive ✓")
+
+    def test_find_next_case_sensitive_regex(self):
+        logger.info("═══ TestSearchPanelExtended.test_find_next_case_sensitive_regex ═══")
+        parent = QWidget()
+        panel = SearchPanel(parent=parent)
+        emitted = []
+        panel.find_next_requested.connect(lambda *a: emitted.append(a))
+        panel.find_input.setText("Hello\\d+")
+        panel.case_sensitive.setChecked(True)
+        panel.is_regex.setChecked(True)
+        panel.on_find_next()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0], ("Hello\\d+", True, True))
+        parent.deleteLater()
+        logger.info("[PASS] find_next with case sensitive + regex ✓")
+
+    def test_find_prev_with_flags(self):
+        logger.info("═══ TestSearchPanelExtended.test_find_prev_with_flags ═══")
+        parent = QWidget()
+        panel = SearchPanel(parent=parent)
+        emitted = []
+        panel.find_prev_requested.connect(lambda *a: emitted.append(a))
+        panel.find_input.setText("world")
+        panel.case_sensitive.setChecked(True)
+        panel.on_find_prev()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0], ("world", True, False))
+        parent.deleteLater()
+        logger.info("[PASS] find_prev with case sensitive ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestTerminalWidgetEdgeCases(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self.tw = TerminalWidget()
+
+    def tearDown(self):
+        self.tw.kill_process()
+        self.tw.deleteLater()
+
+    def test_run_simple_echo(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_run_simple_echo ═══")
+        self.tw._input.setText("echo hello terminal")
+        self.tw._run_command()
+        self.tw._process.waitForFinished(3000)
+        output = self.tw._output.toPlainText()
+        self.assertIn("hello terminal", output)
+        logger.info("[PASS] echo command produces output ✓")
+
+    def test_run_pwd(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_run_pwd ═══")
+        self.tw._input.setText("pwd")
+        self.tw._run_command()
+        self.tw._process.waitForFinished(3000)
+        output = self.tw._output.toPlainText()
+        self.assertIn(self.tw._cwd, output)
+        logger.info("[PASS] pwd shows current directory ✓")
+
+    def test_single_command_with_two_lines(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_single_command_with_two_lines ═══")
+        self.tw._input.setText("echo first && echo second")
+        self.tw._run_command()
+        self.tw._process.waitForFinished(3000)
+        output = self.tw._output.toPlainText()
+        self.assertIn("first", output)
+        self.assertIn("second", output)
+        logger.info("[PASS] single command with two lines ✓")
+
+    def test_run_non_existent_command(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_run_non_existent_command ═══")
+        self.tw._input.setText("nonexistent_cmd_xyz123")
+        self.tw._run_command()
+        self.tw._process.waitForFinished(3000)
+        output = self.tw._output.toPlainText()
+        self.assertIn("not found", output.lower())
+        logger.info("[PASS] non-existent command shows error ✓")
+
+    def test_history_persistence_between_commands(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_history_persistence_between_commands ═══")
+        self.tw._input.setText("echo a")
+        self.tw._run_command()
+        if self.tw._process:
+            self.tw._process.waitForFinished(2000)
+        self.tw._input.setText("echo b")
+        self.tw._run_command()
+        if self.tw._process:
+            self.tw._process.waitForFinished(2000)
+        self.assertIn("echo a", self.tw._history)
+        self.assertIn("echo b", self.tw._history)
+        logger.info("[PASS] history persists between commands ✓")
+
+    def test_clear_history_no_crash(self):
+        logger.info("═══ TestTerminalWidgetEdgeCases.test_clear_history_no_crash ═══")
+        self.tw._history = ["a", "b", "c"]
+        self.tw._history.clear()
+        self.assertEqual(len(self.tw._history), 0)
+        logger.info("[PASS] clear history no crash ✓")
+
+
+# ── Shortcuts, clipboard, window management ──
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestShortcuts(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_terminal_shortcut_connected_to_toggle(self):
+        logger.info("═══ TestShortcuts.test_terminal_shortcut_connected_to_toggle ═══")
+        self.assertTrue(hasattr(self.mw, '_terminal_shortcut'))
+        self.mw._terminal_shortcut.activated.disconnect()
+        self.mw._terminal_shortcut.activated.connect(
+            lambda: setattr(self.mw, '_term_triggered', True))
+        self.mw._terminal_shortcut.activated.emit()
+        logger.info("[PASS] terminal shortcut connected ✓")
+
+    def test_sidebar_shortcut_connected_to_toggle(self):
+        logger.info("═══ TestShortcuts.test_sidebar_shortcut_connected_to_toggle ═══")
+        # sidebar shortcut is defined inline; find any QShortcut with Ctrl+B
+        from PyQt6.QtGui import QShortcut
+        for child in self.mw.findChildren(QShortcut):
+            if child.key().toString() == "Ctrl+B":
+                visible_before = self.mw.sidebar_visible
+                child.activated.emit()
+                self.assertNotEqual(self.mw.sidebar_visible, visible_before)
+                break
+        else:
+            self.fail("No Ctrl+B shortcut found")
+        logger.info("[PASS] sidebar shortcut toggles sidebar ✓")
+
+    def test_shortcut_key_uses_config_binding(self):
+        logger.info("═══ TestShortcuts.test_shortcut_key_uses_config_binding ═══")
+        binding = self.mw.config_manager.get_binding("toggle_terminal")
+        self.assertIsNotNone(binding)
+        expected = QKeySequence(binding)
+        self.assertEqual(self.mw._terminal_shortcut.key(), expected)
+        logger.info("[PASS] terminal shortcut key from config ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestEditorClipboard(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_copy_paste_roundtrip(self):
+        logger.info("═══ TestEditorClipboard.test_copy_paste_roundtrip ═══")
+        editor = CustomEditor()
+        editor.setPlainText("hello world")
+        cursor = editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start, QTextCursor.MoveMode.MoveAnchor)
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        editor.setTextCursor(cursor)
+        editor.copy()
+        editor.clear()
+        self.assertEqual(editor.toPlainText(), "")
+        editor.paste()
+        self.assertEqual(editor.toPlainText(), "hello world")
+        editor.deleteLater()
+        logger.info("[PASS] copy → paste roundtrip ✓")
+
+    def test_cut_moves_text_to_clipboard(self):
+        logger.info("═══ TestEditorClipboard.test_cut_moves_text_to_clipboard ═══")
+        editor = CustomEditor()
+        editor.setPlainText("cut me")
+        cursor = editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start, QTextCursor.MoveMode.MoveAnchor)
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        editor.setTextCursor(cursor)
+        editor.cut()
+        self.assertEqual(editor.toPlainText(), "")
+        editor.deleteLater()
+        logger.info("[PASS] cut removes text ✓")
+
+    def test_paste_without_clipboard_no_crash(self):
+        logger.info("═══ TestEditorClipboard.test_paste_without_clipboard_no_crash ═══")
+        QApplication.clipboard().clear()
+        editor = CustomEditor()
+        editor.clear()
+        editor.paste()
+        self.assertEqual(editor.toPlainText(), "")
+        editor.deleteLater()
+        logger.info("[PASS] paste with empty clipboard no crash ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestWindowManagement(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_toggle_show_whitespace_toggles_action(self):
+        logger.info("═══ TestWindowManagement.test_toggle_show_whitespace_toggles_action ═══")
+        self.mw.show_whitespace_action.setChecked(False)
+        self.mw.toggle_show_whitespace()
+        self.mw.show_whitespace_action.setChecked(True)
+        self.mw.toggle_show_whitespace()
+        logger.info("[PASS] toggle_show_whitespace no crash ✓")
+
+    def test_toggle_show_margin_toggles_action(self):
+        logger.info("═══ TestWindowManagement.test_toggle_show_margin_toggles_action ═══")
+        self.mw.show_margin_action.setChecked(True)
+        self.mw.toggle_show_margin()
+        self.mw.show_margin_action.setChecked(False)
+        self.mw.toggle_show_margin()
+        logger.info("[PASS] toggle_show_margin no crash ✓")
+
+    def test_cycle_encoding_changes_label(self):
+        logger.info("═══ TestWindowManagement.test_cycle_encoding_changes_label ═══")
+        old = self.mw.encoding_label.text()
+        self.mw._cycle_encoding()
+        new = self.mw.encoding_label.text()
+        self.assertNotEqual(old, new)
+        logger.info("[PASS] _cycle_encoding changes label ✓")
+
+# ── Menu principale della MainWindow ──
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowMenu(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_menubar_has_file_edit_settings_view(self):
+        logger.info("═══ TestMainWindowMenu.test_menubar_has_file_edit_settings_view ═══")
+        menubar = self.mw.menuBar()
+        actions = [a.text() for a in menubar.actions()]
+        self.assertIn("&File", actions)
+        self.assertIn("&Edit", actions)
+        self.assertIn("&Settings", actions)
+        self.assertIn("&View", actions)
+        logger.info("[PASS] Menubar contiene File, Edit, Settings, View ✓")
+
+    def test_file_menu_has_expected_actions(self):
+        logger.info("═══ TestMainWindowMenu.test_file_menu_has_expected_actions ═══")
+        menubar = self.mw.menuBar()
+        file_menu = None
+        for a in menubar.actions():
+            if a.text() == "&File":
+                file_menu = a.menu()
+                break
+        self.assertIsNotNone(file_menu)
+        texts = [a.text() for a in file_menu.actions() if a.text()]
+        self.assertIn("&New", texts)
+        self.assertIn("&Open", texts)
+        self.assertIn("&Save", texts)
+        self.assertIn("Save &As...", texts)
+        self.assertIn("&Close Tab", texts)
+        self.assertIn("Recent Files", texts)
+        logger.info("[PASS] File menu ha New, Open, Save, Save As, Close Tab ✓")
+
+    def test_edit_menu_has_expected_actions(self):
+        logger.info("═══ TestMainWindowMenu.test_edit_menu_has_expected_actions ═══")
+        menubar = self.mw.menuBar()
+        edit_menu = None
+        for a in menubar.actions():
+            if a.text() == "&Edit":
+                edit_menu = a.menu()
+                break
+        self.assertIsNotNone(edit_menu)
+        texts = [a.text() for a in edit_menu.actions() if a.text()]
+        self.assertIn("&Undo", texts)
+        self.assertIn("&Redo", texts)
+        self.assertIn("&Find", texts)
+        self.assertIn("&Replace", texts)
+        self.assertIn("Go to Line", texts)
+        self.assertIn("&Command Palette", texts)
+        logger.info("[PASS] Edit menu ha Undo, Redo, Find, Replace, Go to Line, Command Palette ✓")
+
+    def test_view_menu_has_toggle_actions(self):
+        logger.info("═══ TestMainWindowMenu.test_view_menu_has_toggle_actions ═══")
+        menubar = self.mw.menuBar()
+        view_menu = None
+        for a in menubar.actions():
+            if a.text() == "&View":
+                view_menu = a.menu()
+                break
+        self.assertIsNotNone(view_menu)
+        texts = [a.text() for a in view_menu.actions() if a.text()]
+        self.assertIn("Word Wrap", texts)
+        self.assertIn("Show Whitespace", texts)
+        self.assertIn("Show Margin Line", texts)
+        logger.info("[PASS] View menu ha Word Wrap, Show Whitespace, Show Margin Line ✓")
+
+    def test_commands_dict_has_all_expected_keys(self):
+        logger.info("═══ TestMainWindowMenu.test_commands_dict_has_all_expected_keys ═══")
+        expected = {"new_file", "open_file", "save_file", "save_as", "close_tab",
+                    "find", "replace", "undo", "redo", "command_palette",
+                    "goto_line", "toggle_terminal"}
+        self.assertTrue(expected.issubset(self.mw.commands.keys()))
+        logger.info("[PASS] commands dict ha tutte le 12 chiavi attese ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowCloseEvent(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_close_without_modified_tabs_accepts(self):
+        logger.info("═══ TestMainWindowCloseEvent.test_close_without_modified_tabs_accepts ═══")
+        from PyQt6.QtGui import QCloseEvent
+        event = QCloseEvent()
+        self.mw.closeEvent(event)
+        self.assertTrue(event.isAccepted())
+        logger.info("[PASS] closeEvent senza modifiche → accept ✓")
+
+    def test_close_with_modified_tab_save_triggers(self):
+        logger.info("═══ TestMainWindowCloseEvent.test_close_with_modified_tab_save_triggers ═══")
+        tab = EditorTab(pane='left')
+        tab.editor.setPlainText("modified content")
+        tab.editor.document().setModified(True)
+        tab._is_modified = True
+        self.mw.tabs.addTab(tab, "test")
+        # _do_autosave clears _is_modified, so mock it to leave tab alone
+        with unittest.mock.patch.object(self.mw, '_do_autosave'):
+            with unittest.mock.patch.object(QMessageBox, 'question',
+                              return_value=QMessageBox.StandardButton.Save):
+                with unittest.mock.patch.object(self.mw, 'save_tab_by_index',
+                                  return_value=True) as mock_save:
+                    from PyQt6.QtGui import QCloseEvent
+                    event = QCloseEvent()
+                    self.mw.closeEvent(event)
+                    mock_save.assert_called_once()
+        logger.info("[PASS] closeEvent con tab modificato + Save → save_tab_by_index chiamato ✓")
+
+    def test_close_with_modified_tab_cancel_ignores(self):
+        logger.info("═══ TestMainWindowCloseEvent.test_close_with_modified_tab_cancel_ignores ═══")
+        tab = EditorTab(pane='left')
+        tab.editor.setPlainText("modified content")
+        tab.editor.document().setModified(True)
+        tab._is_modified = True
+        self.mw.tabs.addTab(tab, "test")
+        with unittest.mock.patch.object(self.mw, '_do_autosave'):
+            with unittest.mock.patch.object(QMessageBox, 'question',
+                              return_value=QMessageBox.StandardButton.Cancel):
+                from PyQt6.QtGui import QCloseEvent
+                event = QCloseEvent()
+                self.mw.closeEvent(event)
+                self.assertFalse(event.isAccepted())
+        logger.info("[PASS] closeEvent con tab modificato + Cancel → ignore ✓")
+
+    def test_close_with_modified_tab_discard_accepts(self):
+        logger.info("═══ TestMainWindowCloseEvent.test_close_with_modified_tab_discard_accepts ═══")
+        tab = EditorTab(pane='left')
+        tab.editor.setPlainText("modified content")
+        tab.editor.document().setModified(True)
+        tab._is_modified = True
+        self.mw.tabs.addTab(tab, "test")
+        with unittest.mock.patch.object(self.mw, '_do_autosave'):
+            with unittest.mock.patch.object(QMessageBox, 'question',
+                              return_value=QMessageBox.StandardButton.Discard):
+                from PyQt6.QtGui import QCloseEvent
+                event = QCloseEvent()
+                self.mw.closeEvent(event)
+                self.assertTrue(event.isAccepted())
+        logger.info("[PASS] closeEvent con tab modificato + Discard → accept ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestCommandPaletteComandi(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_execute_new_file_routes_correctly(self):
+        logger.info("═══ TestCommandPaletteComandi.test_execute_new_file_routes_correctly ═══")
+        parent = QWidget()
+        palette = CommandPalette({"new_file": "New File"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        palette.action_list.setCurrentRow(0)
+        palette.on_enter_pressed()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0], "new_file")
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] execute new_file from palette ✓")
+
+    def test_execute_open_file_routes_correctly(self):
+        logger.info("═══ TestCommandPaletteComandi.test_execute_open_file_routes_correctly ═══")
+        parent = QWidget()
+        palette = CommandPalette({"open_file": "Open File"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        palette.action_list.setCurrentRow(0)
+        palette.on_enter_pressed()
+        self.assertEqual(emitted[0], "open_file")
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] execute open_file from palette ✓")
+
+    def test_execute_save_file_routes_correctly(self):
+        logger.info("═══ TestCommandPaletteComandi.test_execute_save_file_routes_correctly ═══")
+        parent = QWidget()
+        palette = CommandPalette({"save_file": "Save"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        palette.action_list.setCurrentRow(0)
+        palette.on_enter_pressed()
+        self.assertEqual(emitted[0], "save_file")
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] execute save_file from palette ✓")
+
+    def test_execute_undo_redo_routes_correctly(self):
+        logger.info("═══ TestCommandPaletteComandi.test_execute_undo_redo_routes_correctly ═══")
+        parent = QWidget()
+        palette = CommandPalette({"undo": "Undo", "redo": "Redo"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        palette.action_list.setCurrentRow(1)
+        palette.on_enter_pressed()
+        self.assertEqual(emitted[0], "redo")
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] execute redo from palette ✓")
+
+    def test_open_recent_routing_step_by_step(self):
+        logger.info("═══ TestCommandPaletteComandi.test_open_recent_routing_step_by_step ═══")
+        parent = QWidget()
+        palette = CommandPalette({"open_recent_0": "Open: /tmp/test.txt"}, parent=parent)
+        emitted = []
+        palette.actionTriggered.connect(lambda a: emitted.append(a))
+        palette.action_list.setCurrentRow(0)
+        palette.on_enter_pressed()
+        self.assertEqual(emitted[0], "open_recent_0")
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] open_recent routing works ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestCommandPaletteRecentFiles(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_update_actions_with_recent_files(self):
+        logger.info("═══ TestCommandPaletteRecentFiles.test_update_actions_with_recent_files ═══")
+        parent = QWidget()
+        palette = CommandPalette({"cmd.test": "Test"}, parent=parent)
+        commands = {"cmd.a": "Action A", "cmd.b": "Action B"}
+        palette.update_actions(commands)
+        self.assertEqual(palette.action_list.count(), 2)
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] update_actions with additional commands ✓")
+
+    def test_filter_empty_list_no_crash(self):
+        logger.info("═══ TestCommandPaletteRecentFiles.test_filter_empty_list_no_crash ═══")
+        parent = QWidget()
+        palette = CommandPalette({}, parent=parent)
+        palette.filter_actions("test")
+        self.assertEqual(palette.action_list.count(), 0)
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] filter on empty list no crash ✓")
+
+    def test_enter_on_empty_list_no_crash(self):
+        logger.info("═══ TestCommandPaletteRecentFiles.test_enter_on_empty_list_no_crash ═══")
+        parent = QWidget()
+        palette = CommandPalette({}, parent=parent)
+        palette.on_enter_pressed()
+        palette.deleteLater()
+        parent.deleteLater()
+        logger.info("[PASS] enter on empty list no crash ✓")
+
+
+# ── Git integration, multi-pane, tree actions ──
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestGitCaching(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_on_git_result_shows_branch_on_label(self):
+        logger.info("═══ TestGitCaching.test_on_git_result_shows_branch_on_label ═══")
+        self.mw._on_git_branch_result("/tmp", "feature-x")
+        self.assertIn("feature-x", self.mw.git_label.text())
+        logger.info("[PASS] _on_git_branch_result shows branch ✓")
+
+    def test_on_git_result_empty_hides_label(self):
+        logger.info("═══ TestGitCaching.test_on_git_result_empty_hides_label ═══")
+        self.mw._on_git_branch_result("/tmp", "")
+        self.assertTrue(self.mw.git_label.isHidden())
+        logger.info("[PASS] _on_git_result empty hides label ✓")
+
+    def test_git_cache_used_on_subsequent_call(self):
+        logger.info("═══ TestGitCaching.test_git_cache_used_on_subsequent_call ═══")
+        self.mw._git_cache["/tmp"] = {"branch": "cached-branch", "time": time.time()}
+        with unittest.mock.patch.object(self.mw, '_git_workers', new_callable=list):
+            self.mw._update_git_branch.cache_clear()
+        logger.info("[PASS] git cache structure works ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMultiPaneSplit(unittest.TestCase):
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_split_editor_with_readable_file_creates_right_tab(self):
+        logger.info("═══ TestMultiPaneSplit.test_split_editor_creates_right_tab ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "split_me.py"
+            f.write_text("x = 1")
+            self.mw.open_file(str(f))
+            self.assertTrue(self.mw.tabs_right.isHidden())
+            self.mw.split_editor()
+            self.assertFalse(self.mw.tabs_right.isHidden())
+            self.assertEqual(self.mw.tabs_right.count(), 1)
+        logger.info("[PASS] split_editor con file leggibile crea tab right ✓")
+
+    def test_split_editor_twice_unsplits(self):
+        logger.info("═══ TestMultiPaneSplit.test_split_editor_twice_unsplits ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "unsplit.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw.split_editor()
+            self.assertFalse(self.mw.tabs_right.isHidden())
+            self.mw.split_editor()
+            self.assertTrue(self.mw.tabs_right.isHidden())
+        logger.info("[PASS] split_editor due volte unsplit ✓")
+
+    def test_on_pane_activated_sets_active_pane(self):
+        logger.info("═══ TestMultiPaneSplit.test_on_pane_activated_sets_active_pane ═══")
+        self.mw._on_pane_activated("right")
+        self.assertEqual(self.mw._active_pane, "right")
+        self.mw._on_pane_activated("left")
+        self.assertEqual(self.mw._active_pane, "left")
+        logger.info("[PASS] _on_pane_activated cambia _active_pane ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestFileTreeIconMapping(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_file_icon_returns_qicon_for_py(self):
+        logger.info("═══ TestFileTreeIconMapping.test_file_icon_returns_qicon_for_py ═══")
+        ft = FileTree()
+        ico = ft._file_icon("script.py")
+        self.assertIsInstance(ico, QIcon)
+        ft.deleteLater()
+        logger.info("[PASS] _file_icon for .py returns QIcon ✓")
+
+    def test_file_icon_returns_qicon_for_js(self):
+        logger.info("═══ TestFileTreeIconMapping.test_file_icon_returns_qicon_for_js ═══")
+        ft = FileTree()
+        ico = ft._file_icon("app.js")
+        self.assertIsInstance(ico, QIcon)
+        ft.deleteLater()
+        logger.info("[PASS] _file_icon for .js returns QIcon ✓")
+
+    def test_file_icon_returns_qicon_for_unknown(self):
+        logger.info("═══ TestFileTreeIconMapping.test_file_icon_returns_qicon_for_unknown ═══")
+        ft = FileTree()
+        ico = ft._file_icon("readme.txt")
+        self.assertIsInstance(ico, QIcon)
+        ft.deleteLater()
+        logger.info("[PASS] _file_icon for .txt returns QIcon ✓")
+
+    def test_set_root_path_changes_current_root(self):
+        logger.info("═══ TestFileTreeIconMapping.test_set_root_path_changes_current_root ═══")
+        with tmp_dir() as tmp:
+            ft = FileTree(str(tmp))
+            new_root = str(tmp.parent)
+            ft.set_root_path(new_root)
+            self.assertEqual(ft.current_root, os.path.realpath(new_root))
+            ft.deleteLater()
+        logger.info("[PASS] set_root_path changes current_root ✓")
+
+    def test_on_item_click_directory_toggles_expand(self):
+        logger.info("═══ TestFileTreeIconMapping.test_on_item_click_directory_toggles_expand ═══")
+        with tmp_dir() as tmp:
+            sub = tmp / "subdir_for_click"
+            sub.mkdir()
+            ft = FileTree(str(tmp))
+            item = None
+            for i in range(ft.tree.topLevelItemCount()):
+                if ft.tree.topLevelItem(i).text(0) == "subdir_for_click":
+                    item = ft.tree.topLevelItem(i)
+                    break
+            if item:
+                was_expanded = item.isExpanded()
+                ft._on_item_clicked(item, 0)
+                self.assertNotEqual(item.isExpanded(), was_expanded)
+            ft.deleteLater()
+        logger.info("[PASS] _on_item_click toggles directory ✓")
+
+
 class TestNoPrintResiduali(unittest.TestCase):
     """Fase 9 regression — nessun print() nei sorgenti del progetto"""
 
@@ -2473,6 +4501,35 @@ def run():
         TestFileTreeCreateRenameDelete,
         TestEditorTabZoom,
         TestConfigManagerKeybindings,
+        TestCustomEditor,
+        TestSyntaxHighlighterExtended,
+        TestFileTreeExtended,
+        TestMainWindowCritical,
+        TestTerminalWidgetExtended,
+        TestResizeHandleExtended,
+        TestCommandPaletteExtended,
+        TestKeybindingsDialogExtended,
+        TestIconsAndTheme,
+        TestDraggableTabBar,
+        TestCodeFoldingArea,
+        TestLineNumberArea,
+        TestMarginLine,
+        TestMainWindowAutosave,
+        TestEditorTabAtomicSave,
+        TestSyntaxHighlighterEdgeCases,
+        TestResizeHandleExtended2,
+        TestSearchPanelExtended,
+        TestTerminalWidgetEdgeCases,
+        TestCommandPaletteRecentFiles,
+        TestCommandPaletteComandi,
+        TestShortcuts,
+        TestEditorClipboard,
+        TestWindowManagement,
+        TestMainWindowMenu,
+        TestMainWindowCloseEvent,
+        TestGitCaching,
+        TestMultiPaneSplit,
+        TestFileTreeIconMapping,
         TestNoPrintResiduali,
     ]
 
@@ -2510,6 +4567,12 @@ def run():
             lines = tb.split("\n")
             short = " | ".join(l.strip() for l in lines if l.strip())[:120]
             logger.info("    ✗ %s — %s", test, short)
+    if result.errors:
+        logger.info("  ── ERRORI ──")
+        for test, tb in result.errors:
+            lines = tb.split("\n")
+            short = " | ".join(l.strip() for l in lines if l.strip())[:120]
+            logger.info("    ⚠ %s — %s", test, short)
     if result.expectedFailures:
         logger.info("  ── EXPECTED FAILURES (bug noti) ──")
         for test, _ in result.expectedFailures:

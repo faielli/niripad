@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem,
     QMenu, QMessageBox, QInputDialog, QFileDialog
 )
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QAction
 from PyQt6.QtCore import pyqtSignal, Qt
 from icon_utils import Icons
 from theme_tokens import Tokens
