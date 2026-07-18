@@ -228,6 +228,9 @@ class FileTree(QWidget):
     def _create_new_item(self, is_folder):
         name, ok = QInputDialog.getText(self, "New " + ("Folder" if is_folder else "File"), "Name:")
         if ok and name:
+            name = os.path.basename(name)
+            if not name or name.startswith('.'):
+                return
             parent_path = self.current_root
             selected = self.tree.selectedItems()
             if selected:

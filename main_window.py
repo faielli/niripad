@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import time
 import subprocess
@@ -294,11 +295,13 @@ class MainWindow(QMainWindow):
         self._setup_statusbar()
         self._create_menu()
 
-        # Initial tab
-        self._restore_session()
-        if self.tabs.count() == 0:
-            self.new_file()
         self._start_autosave_timer()
+
+        self._restore_session()
+        cli_files = [os.path.abspath(a) for a in sys.argv[1:]
+                     if not a.startswith('-') and os.path.isfile(a)]
+        if self.tabs.count() == 0 and not cli_files:
+            self.new_file()
 
     def toggle_sidebar(self):
         total = sum(self.splitter.sizes())
@@ -742,14 +745,14 @@ class MainWindow(QMainWindow):
         find_action = QAction("&Find", self)
         find_action.setIcon(ico.search())
         find_action.setShortcut(QKeySequence(self.config_manager.get_binding("find")))
-        find_action.triggered.connect(self.toggle_search_panel)
+        find_action.triggered.connect(lambda: self.toggle_search_panel('find'))
         edit_menu.addAction(find_action)
 
         # Replace
         replace_action = QAction("&Replace", self)
         replace_action.setIcon(ico.exchange_alt())
         replace_action.setShortcut(QKeySequence(self.config_manager.get_binding("replace")))
-        replace_action.triggered.connect(self.toggle_search_panel)
+        replace_action.triggered.connect(lambda: self.toggle_search_panel('replace'))
         edit_menu.addAction(replace_action)
 
         # Go to Line
@@ -1026,7 +1029,6 @@ class MainWindow(QMainWindow):
         if current_index < self.tabs.count():
             self.tabs.setCurrentIndex(current_index)
 
-
     def new_file(self):
         tw = self._active_tab_widget()
         pane = self._active_pane
@@ -1045,40 +1047,43 @@ class MainWindow(QMainWindow):
         if not file_path:
             file_path, _ = QFileDialog.getOpenFileName(self, "Open File")
 
-        if file_path:
-            if not os.path.exists(file_path):
-                logger.warning("Open file failed: %s not found", file_path)
+        if not file_path:
+            return
+
+        tw = self._active_tab_widget()
+        pane = self._active_pane
+        resolved = Path(file_path).resolve()
+
+        # Check if a tab with the same file path is already open
+        for i in range(tw.count()):
+            tab = tw.widget(i)
+            if tab.file_path and Path(tab.file_path).resolve() == resolved:
+                tw.setCurrentIndex(i)
+                self.config_manager.add_recent_file(str(resolved))
+                self._update_recent_menu()
                 return
 
-            tw = self._active_tab_widget()
-            pane = self._active_pane
-            resolved = Path(file_path).resolve()
-            # Check if a tab with the same file path is already open
-            for i in range(tw.count()):
-                tab = tw.widget(i)
-                if tab.file_path and Path(tab.file_path).resolve() == resolved:
-                    tw.setCurrentIndex(i)
-                    self.config_manager.add_recent_file(str(resolved))
-                    self._update_recent_menu()
-                    return
-
-            tab = EditorTab(file_path, pane=pane)
-            if tab._load_error:
+        tab = EditorTab(file_path, pane=pane)
+        if tab._load_error:
+            if os.path.exists(file_path):
                 QMessageBox.warning(self, "Open File",
                     f"Could not open file:\n{file_path}\n\nError: {tab._load_error}")
                 tab.deleteLater()
                 return
-            tab.pane_activated.connect(self._on_pane_activated)
-            tab.set_theme(self.config_manager.get("theme", "lilac"))
-            index = tw.addTab(tab, tab.get_title())
-            tw.setCurrentIndex(index)
-            tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
-            tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
-            tab.editor.set_show_margin(self.show_margin_action.isChecked())
-            self._connect_tab_signals(tab, pane, tw)
-            self.add_close_button_to(pane, index)
-            self.config_manager.add_recent_file(str(resolved))
-            self._update_recent_menu()
+            # Non-existent file: reset error, keep tab with filename
+            tab._load_error = None
+            tab.file_path = str(resolved)
+        tab.pane_activated.connect(self._on_pane_activated)
+        tab.set_theme(self.config_manager.get("theme", "lilac"))
+        index = tw.addTab(tab, tab.get_title())
+        tw.setCurrentIndex(index)
+        tab.editor.set_word_wrap(self.word_wrap_action.isChecked())
+        tab.editor.set_show_whitespace(self.show_whitespace_action.isChecked())
+        tab.editor.set_show_margin(self.show_margin_action.isChecked())
+        self._connect_tab_signals(tab, pane, tw)
+        self.add_close_button_to(pane, index)
+        self.config_manager.add_recent_file(str(resolved))
+        self._update_recent_menu()
 
     def make_close_handler(self, idx):
         return lambda: self.close_tab(idx, 'left')
@@ -1280,23 +1285,9 @@ class MainWindow(QMainWindow):
             self.show_save_error(e, tab.file_path or "Unknown Path")
             return False
 
-    def update_tab_title(self, index):
-        tab = self.tabs.widget(index)
-        if not tab:
-            return
-        
-        title = tab.get_title()
-        
-        if tab.is_modified():
-            self.tabs.setTabText(index, f"● {title}")
-            self.tabs.setTabIcon(index, self.status_icons["modified"])
-        else:
-            self.tabs.setTabText(index, title)
-            self.tabs.setTabIcon(index, self.status_icons["saved"])
-
     def closeEvent(self, event):
         # Stop git threads
-        for thread, worker in self._git_workers:
+        for thread, worker in list(self._git_workers):
             if thread.isRunning():
                 thread.quit()
                 thread.wait(2000)
@@ -1344,7 +1335,7 @@ class MainWindow(QMainWindow):
         if tab:
             tab.editor.redo()
 
-    def toggle_search_panel(self):
+    def toggle_search_panel(self, mode='find'):
         if self.search_panel.maximumHeight() > 0:
             current_tab = self._active_tab_widget().currentWidget()
             if current_tab:
@@ -1361,6 +1352,12 @@ class MainWindow(QMainWindow):
             self._search_anim.setStartValue(0)
             self._search_anim.setEndValue(150)
         self._search_anim.start()
+
+        if self.search_panel.maximumHeight() <= 0:
+            if mode == 'replace':
+                self.search_panel.replace_input.setFocus()
+            else:
+                self.search_panel.find_input.setFocus()
 
     def show_command_palette(self):
         commands = dict(self.commands)

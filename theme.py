@@ -2,38 +2,6 @@ import warnings
 from PyQt6.QtGui import QColor
 from theme_tokens import Tokens
 
-# New color constant aliases (Soft Dark Lilac palette)
-BG_BASE       = "#1E1E2E"
-BG_SURFACE    = "#252535"
-BG_ELEVATED   = "#2D2D42"
-BG_OVERLAY    = "#32324A"
-
-ACCENT_PRIMARY   = "#A78BFA"
-ACCENT_SECONDARY = "#C4B5FD"
-ACCENT_DIM       = "#6D5FA6"
-
-TEXT_PRIMARY   = "#E2E0F0"
-TEXT_SECONDARY = "#9B99B8"
-TEXT_DISABLED  = "#5A5870"
-
-BORDER_SUBTLE  = "#3A3A55"
-BORDER_ACCENT  = "#A78BFA"
-
-SUCCESS = "#A3E4C7"
-WARNING = "#F9C97C"
-ERROR   = "#F28BAB"
-
-RADIUS_SM = "4px"
-RADIUS_MD = "8px"
-RADIUS_LG = "12px"
-
-SPACE = [0, 4, 8, 12, 16, 24, 32, 48]
-
-FONT_MONO = "'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace"
-FONT_UI = "'Inter', 'Segoe UI', 'Ubuntu', 'Cantarell', sans-serif"
-FONT_SIZE_UI = 13
-FONT_SIZE_MONO = 14
-
 class Theme:
     NORD = {
         "background": QColor("#2E3440"),

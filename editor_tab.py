@@ -11,11 +11,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _is_path_safe(file_path):
+def _is_path_safe(file_path, allowed_root=None):
     resolved = Path(file_path).resolve()
-    parts = Path(file_path).parts
-    if ".." in parts:
-        logger.warning("Path traversal detected in %r, resolving to %r", file_path, resolved)
+    if ".." in Path(file_path).parts:
+        logger.warning("Path traversal in %r", file_path)
+        return False
+    if allowed_root:
+        return str(resolved).startswith(str(Path(allowed_root).resolve()))
     return True
 
 
@@ -761,6 +763,7 @@ class EditorTab(QWidget):
         self.apply_theme()
         if hasattr(self, 'highlighter'):
             self.highlighter.theme = self.current_theme
+            self.highlighter._theme_name = theme_name
             for key in list(type(self.highlighter)._rules_cache):
                 if key[0] == self._language:
                     del type(self.highlighter)._rules_cache[key]

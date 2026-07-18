@@ -127,7 +127,6 @@ class ConfigManager(QObject):
                 logger.error("Error loading keybindings: %s", e)
 
         else:
-            self.keybindings = copy.deepcopy(self.DEFAULT_KEYBINDINGS)
             self.save_keybindings()
 
     def save_keybindings(self):

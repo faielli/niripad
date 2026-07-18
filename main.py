@@ -20,6 +20,11 @@ def main():
     window = MainWindow()
     window.show()
 
+    args = [a for a in sys.argv[1:] if not a.startswith('-')]
+    for path in args:
+        resolved = os.path.abspath(path)
+        window.open_file(resolved)
+
     sys.exit(app.exec())
 
 if __name__ == "__main__":

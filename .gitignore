@@ -16,3 +16,4 @@ dist/
 src/
 pkg/
 test_report.txt
+.pytest_cache/

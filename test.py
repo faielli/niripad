@@ -256,18 +256,15 @@ class TestIsPathSafe(unittest.TestCase):
         self.assertTrue(result)
         logger.info("[PASS] _is_path_safe('/tmp/normal_file.txt') → True ✓")
 
-    @unittest.expectedFailure
     def test_path_traversal_returns_false(self):
         """
-        BUG: _is_path_safe('../../etc/passwd') ritorna True ma dovrebbe ritornare False.
-        Questo test è expectedFailure: quando il bug viene corretto, diventa unexpected
-        success e segnala che il fix è pronto.
+        _is_path_safe con path traversal deve ritornare False.
         """
-        logger.info("═══ TestIsPathSafe.test_path_traversal_returns_false (BUG NOTO) ═══")
+        logger.info("═══ TestIsPathSafe.test_path_traversal_returns_false ═══")
         result = _is_path_safe("../../etc/passwd")
         self.assertFalse(result,
-            "BUG: _is_path_safe dovrebbe rifiutare path traversal, ma ritorna True")
-        logger.info("[XFAIL] BUG confermato: _is_path_safe accetta path traversal")
+            "_is_path_safe dovrebbe rifiutare path traversal")
+        logger.info("[PASS] _is_path_safe rifiuta path traversal ✓")
 
 
 @unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
@@ -522,6 +519,7 @@ class TestMainWindowRestore(unittest.TestCase):
             with unittest.mock.patch.object(MainWindow, '_update_git_branch', return_value=None):
                 with self.assertLogs("main_window", level="WARNING") as logs:
                     mw = MainWindow()
+                    mw._restore_session()
                     self.assertEqual(mw.tabs.count(), 1,
                         "Solo il tab del file esistente deve essere aperto")
                 self.assertTrue(any("file not found" in msg for msg in logs.output))
@@ -541,6 +539,7 @@ class TestMainWindowRestore(unittest.TestCase):
                 with self.assertLogs("main_window", level="WARNING") as logs:
                     # Right ramo: EditorTab(path, pane='right') + _load_error check
                     mw = MainWindow()
+                    mw._restore_session()
                 has_failed_warning = any("failed to load" in msg for msg in logs.output)
                 self.assertTrue(has_failed_warning,
                     f"Nessun warning 'failed to load' trovato tra: {logs.output}")
@@ -559,21 +558,22 @@ class TestMainWindowOpenFile(unittest.TestCase):
     def tearDown(self):
         self._tmp_ctx.__exit__(None, None, None)
 
-    def test_open_nonexistent_shows_dialog(self):
-        """Fase 7.5 — open_file su path inesistente → logger.warning + nessun tab."""
-        logger.info("═══ TestMainWindowOpenFile.test_open_nonexistent_shows_dialog ═══")
+    def test_open_nonexistent_creates_tab(self):
+        """open_file su path inesistente → tab creato con filename."""
+        logger.info("═══ TestMainWindowOpenFile.test_open_nonexistent_creates_tab ═══")
         with patched_config(self.tmp):
             with unittest.mock.patch.object(MainWindow, '_update_git_branch', return_value=None):
                 mw = MainWindow()
         initial_count = mw.tabs.count()
-        with self.assertLogs("main_window", level="WARNING") as logs:
-            mw.open_file(str(self.tmp / "nope.py"))
-        self.assertTrue(any("not found" in msg for msg in logs.output),
-            "Nessun warning 'not found' emesso")
-        self.assertEqual(mw.tabs.count(), initial_count,
-            "Nessun tab aggiunto per file inesistente")
+        target = str(self.tmp / "nope.py")
+        mw.open_file(target)
+        self.assertEqual(mw.tabs.count(), initial_count + 1,
+            "Tab creato per file inesistente")
+        tab = mw.tabs.widget(mw.tabs.count() - 1)
+        self.assertEqual(tab.file_path, str(Path(target).resolve()))
+        self.assertEqual(tab.get_title(), "nope.py")
         mw.deleteLater()
-        logger.info("[PASS] open_file inesistente → warning emesso, tab count invariato ✓")
+        logger.info("[PASS] open_file inesistente → tab creato con filename ✓")
 
     def test_open_existent_adds_tab(self):
         """open_file su file esistente → tab aggiunto, nessun dialog."""

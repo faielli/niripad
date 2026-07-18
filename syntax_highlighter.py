@@ -13,7 +13,8 @@ class UniversalHighlighter(QSyntaxHighlighter):
 
     def set_language(self, language):
         self.current_language = language
-        cache_key = (language, id(self.theme))
+        theme_key = getattr(self, '_theme_name', id(self.theme))
+        cache_key = (language, theme_key)
         if cache_key in self._rules_cache:
             self.rules = self._rules_cache[cache_key]
         else:
