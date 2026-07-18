@@ -681,10 +681,14 @@ class CustomEditor(QPlainTextEdit):
 
     def updateRequest(self, rect, dy):
         super().updateRequest(rect, dy)
-        sidebar_width = self.line_number_width() + self.folding_area_width()
-        if rect.contains(QRect(0, 0, sidebar_width, self.height())):
-            self.lineNumberArea.update()
-            self.foldingArea.update()
+        if dy:
+            self.lineNumberArea.scroll(0, dy)
+            self.foldingArea.scroll(0, dy)
+        else:
+            sidebar_width = self.line_number_width() + self.folding_area_width()
+            if rect.contains(QRect(0, 0, sidebar_width, self.height())):
+                self.lineNumberArea.update()
+                self.foldingArea.update()
         self.marginLine.update()
 
     def lineNumberAreaPaintEvent(self, event):
