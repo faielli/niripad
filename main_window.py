@@ -334,7 +334,7 @@ class MainWindow(QMainWindow):
         self.sidebar_visible = not self.sidebar_visible
 
     def toggle_terminal(self):
-        if self.terminal_widget.isVisible():
+        if not self.terminal_widget.isHidden():
             self.terminal_widget.hide()
         else:
             tab = self._active_tab_widget().currentWidget()
@@ -823,6 +823,14 @@ class MainWindow(QMainWindow):
         self.show_margin_action.setChecked(True)
         self.show_margin_action.triggered.connect(self.toggle_show_margin)
         view_menu.addAction(self.show_margin_action)
+
+        show_hidden_action = QAction("Show Hidden Files", self)
+        show_hidden_action.setCheckable(True)
+        show_hidden_action.setChecked(False)
+        show_hidden_action.triggered.connect(
+            lambda checked: self.file_tree.set_show_hidden(checked)
+        )
+        view_menu.addAction(show_hidden_action)
 
         view_menu.addSeparator()
 

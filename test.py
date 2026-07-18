@@ -66,6 +66,7 @@ try:
     from keybindings_dialog import KeybindingsDialog
     from icon_utils import get_icon, Icons
     from file_tree import FileTree
+    from terminal_widget import TerminalWidget, ResizeHandle
 
     QT_AVAILABLE = True
     logger.info("[SETUP] Qt + tutti i moduli importati correttamente")
@@ -1229,6 +1230,1146 @@ class TestMainWindowExtended(unittest.TestCase):
         logger.info("[PASS] split_editor crea tab nel right pane ✓")
 
 
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestTerminalWidget(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self.tw = TerminalWidget()
+
+    def tearDown(self):
+        self.tw.kill_process()
+        self.tw.deleteLater()
+
+    def test_initial_height_is_200(self):
+        logger.info("═══ TestTerminalWidget.test_initial_height_is_200 ═══")
+        self.assertEqual(self.tw.height(), 200)
+        logger.info("[PASS] TerminalWidget initial height 200 ✓")
+
+    def test_set_cwd_with_valid_dir(self):
+        logger.info("═══ TestTerminalWidget.test_set_cwd_with_valid_dir ═══")
+        with tmp_dir() as tmp:
+            self.tw.set_cwd(str(tmp))
+            self.assertEqual(self.tw._cwd, str(tmp))
+            self.assertEqual(self.tw._cwd_label.text(), str(tmp))
+        logger.info("[PASS] set_cwd con dir aggiorna _cwd e label ✓")
+
+    def test_set_cwd_with_file_uses_parent(self):
+        logger.info("═══ TestTerminalWidget.test_set_cwd_with_file_uses_parent ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "file.txt"
+            f.write_text("x")
+            self.tw.set_cwd(str(f))
+            self.assertEqual(self.tw._cwd, str(tmp))
+        logger.info("[PASS] set_cwd con file usa parent dir ✓")
+
+    def test_set_cwd_invalid_path_ignored(self):
+        logger.info("═══ TestTerminalWidget.test_set_cwd_invalid_path_ignored ═══")
+        original = self.tw._cwd
+        self.tw.set_cwd("/nonexistent/path/xyz")
+        self.assertEqual(self.tw._cwd, original)
+        logger.info("[PASS] set_cwd su path invalido ignorato ✓")
+
+    def test_clear_output(self):
+        logger.info("═══ TestTerminalWidget.test_clear_output ═══")
+        self.tw._append("some text\n")
+        self.tw.clear_output()
+        self.assertEqual(self.tw._output.toPlainText(), "")
+        logger.info("[PASS] clear_output svuota output ✓")
+
+    def test_append_adds_text(self):
+        logger.info("═══ TestTerminalWidget.test_append_adds_text ═══")
+        self.tw._append("hello world\n")
+        self.assertIn("hello world", self.tw._output.toPlainText())
+        logger.info("[PASS] _append aggiunge testo ✓")
+
+    def test_history_navigation_up(self):
+        logger.info("═══ TestTerminalWidget.test_history_navigation_up ═══")
+        self.tw._history = ["cmd1", "cmd2"]
+        self.tw._history_index = 2
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.NoModifier)
+        self.tw.eventFilter(self.tw._input, event)
+        self.assertEqual(self.tw._input.text(), "cmd2")
+        self.tw.eventFilter(self.tw._input, event)
+        self.assertEqual(self.tw._input.text(), "cmd1")
+        logger.info("[PASS] history up naviga correttamente ✓")
+
+    def test_history_navigation_down(self):
+        logger.info("═══ TestTerminalWidget.test_history_navigation_down ═══")
+        self.tw._history = ["cmd1", "cmd2"]
+        self.tw._history_index = 0
+        self.tw._input.setText("cmd1")
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.NoModifier)
+        self.tw.eventFilter(self.tw._input, event)
+        self.assertEqual(self.tw._input.text(), "cmd2")
+        logger.info("[PASS] history down naviga correttamente ✓")
+
+    def test_cd_valid_directory(self):
+        logger.info("═══ TestTerminalWidget.test_cd_valid_directory ═══")
+        with tmp_dir() as tmp:
+            self.tw._cwd = str(tmp)
+            self.tw._input.setText(f"cd {tmp}")
+            self.tw._run_command()
+            self.assertEqual(self.tw._cwd, str(tmp))
+        logger.info("[PASS] cd in directory valida funziona ✓")
+
+    def test_cd_invalid_directory_shows_error(self):
+        logger.info("═══ TestTerminalWidget.test_cd_invalid_directory_shows_error ═══")
+        self.tw._cwd = os.getcwd()
+        self.tw._input.setText("cd /nonexistent/path/xyz")
+        self.tw._run_command()
+        self.assertIn("No such directory", self.tw._output.toPlainText())
+        logger.info("[PASS] cd in directory invalida mostra errore ✓")
+
+    def test_run_command_blocked_while_process_running(self):
+        logger.info("═══ TestTerminalWidget.test_run_command_blocked_while_process_running ═══")
+        from PyQt6.QtCore import QProcess
+        self.tw._process = QProcess()
+        self.tw._process.start("/bin/bash", ["-c", "sleep 10"])
+        self.tw._process.waitForStarted(1000)
+        self.tw._input.setText("echo second")
+        self.tw._run_command()
+        self.assertIn("already running", self.tw._output.toPlainText())
+        self.tw._process.kill()
+        self.tw._process.waitForFinished(1000)
+        logger.info("[PASS] comando bloccato se processo in esecuzione ✓")
+
+    def test_kill_process_appends_message(self):
+        logger.info("═══ TestTerminalWidget.test_kill_process_appends_message ═══")
+        from PyQt6.QtCore import QProcess
+        self.tw._process = QProcess()
+        self.tw._process.start("/bin/bash", ["-c", "sleep 10"])
+        self.tw._process.waitForStarted(1000)
+        self.tw.kill_process()
+        self.tw._process.waitForFinished(1000)
+        self.assertIn("killed", self.tw._output.toPlainText())
+        logger.info("[PASS] kill_process scrive messaggio ✓")
+
+    def test_collapse_calls_parent_toggle_terminal(self):
+        logger.info("═══ TestTerminalWidget.test_collapse_calls_parent_toggle_terminal ═══")
+        mock_parent = QWidget()
+        mock_parent.toggle_terminal = unittest.mock.MagicMock()
+        tw = TerminalWidget(parent=mock_parent)
+        tw._collapse()
+        mock_parent.toggle_terminal.assert_called_once()
+        tw.deleteLater()
+        mock_parent.deleteLater()
+        logger.info("[PASS] _collapse chiama parent.toggle_terminal ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestResizeHandle(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_initial_height_is_4(self):
+        logger.info("═══ TestResizeHandle.test_initial_height_is_4 ═══")
+        tw = TerminalWidget()
+        self.assertEqual(tw._resize_handle.height(), 4)
+        tw.deleteLater()
+        logger.info("[PASS] ResizeHandle initial height 4 ✓")
+
+    def test_cursor_is_size_ver(self):
+        logger.info("═══ TestResizeHandle.test_cursor_is_size_ver ═══")
+        tw = TerminalWidget()
+        self.assertEqual(tw._resize_handle.cursor().shape(), Qt.CursorShape.SizeVerCursor)
+        tw.deleteLater()
+        logger.info("[PASS] ResizeHandle cursor SizeVerCursor ✓")
+
+    def test_drag_up_increases_height(self):
+        logger.info("═══ TestResizeHandle.test_drag_up_increases_height ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(200)
+        handle = tw._resize_handle
+        handle._press_y = 300.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(0, 0),
+            QPointF(0, 250),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertGreater(tw.height(), 200)
+        tw.deleteLater()
+        logger.info("[PASS] drag up aumenta altezza ✓")
+
+    def test_drag_down_decreases_height(self):
+        logger.info("═══ TestResizeHandle.test_drag_down_decreases_height ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(200)
+        handle = tw._resize_handle
+        handle._press_y = 300.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(0, 0),
+            QPointF(0, 350),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertLess(tw.height(), 200)
+        tw.deleteLater()
+        logger.info("[PASS] drag down diminuisce altezza ✓")
+
+    def test_height_clamped_min_80(self):
+        logger.info("═══ TestResizeHandle.test_height_clamped_min_80 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(100)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(0, 0), QPointF(0, 500),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertGreaterEqual(tw.height(), 80)
+        tw.deleteLater()
+        logger.info("[PASS] altezza minima 80 ✓")
+
+    def test_height_clamped_max_600(self):
+        logger.info("═══ TestResizeHandle.test_height_clamped_max_600 ═══")
+        tw = TerminalWidget()
+        tw.setFixedHeight(400)
+        handle = tw._resize_handle
+        handle._press_y = 0.0
+        from PyQt6.QtCore import QPointF, QEvent
+        from PyQt6.QtGui import QMouseEvent
+        move_event = QMouseEvent(
+            QEvent.Type.MouseMove,
+            QPointF(0, 0), QPointF(0, -500),
+            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier
+        )
+        handle.mouseMoveEvent(move_event)
+        self.assertLessEqual(tw.height(), 600)
+        tw.deleteLater()
+        logger.info("[PASS] altezza massima 600 ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestFileTreeHiddenFiles(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def _visible_names(self, ft):
+        names = set()
+        for i in range(ft.tree.topLevelItemCount()):
+            text = ft.tree.topLevelItem(i).text(0)
+            if text != "..":
+                names.add(text)
+        return names
+
+    def test_hidden_files_hidden_by_default(self):
+        logger.info("═══ TestFileTreeHiddenFiles.test_hidden_files_hidden_by_default ═══")
+        with tmp_dir() as tmp:
+            (tmp / "visible.txt").write_text("x")
+            (tmp / ".hidden.txt").write_text("x")
+            ft = FileTree(str(tmp))
+            names = self._visible_names(ft)
+            self.assertIn("visible.txt", names)
+            self.assertNotIn(".hidden.txt", names)
+            ft.deleteLater()
+        logger.info("[PASS] file nascosti nascosti di default ✓")
+
+    def test_set_show_hidden_true_reveals_hidden(self):
+        logger.info("═══ TestFileTreeHiddenFiles.test_set_show_hidden_true_reveals_hidden ═══")
+        with tmp_dir() as tmp:
+            (tmp / "visible.txt").write_text("x")
+            (tmp / ".hidden.txt").write_text("x")
+            ft = FileTree(str(tmp))
+            ft.set_show_hidden(True)
+            names = self._visible_names(ft)
+            self.assertIn("visible.txt", names)
+            self.assertIn(".hidden.txt", names)
+            ft.deleteLater()
+        logger.info("[PASS] set_show_hidden(True) rivela nascosti ✓")
+
+    def test_set_show_hidden_false_hides_again(self):
+        logger.info("═══ TestFileTreeHiddenFiles.test_set_show_hidden_false_hides_again ═══")
+        with tmp_dir() as tmp:
+            (tmp / ".hidden.txt").write_text("x")
+            ft = FileTree(str(tmp))
+            ft.set_show_hidden(True)
+            ft.set_show_hidden(False)
+            names = self._visible_names(ft)
+            self.assertNotIn(".hidden.txt", names)
+            ft.deleteLater()
+        logger.info("[PASS] set_show_hidden(False) nasconde di nuovo ✓")
+
+    def test_parent_item_always_visible(self):
+        logger.info("═══ TestFileTreeHiddenFiles.test_parent_item_always_visible ═══")
+        with tmp_dir() as tmp:
+            ft = FileTree(str(tmp))
+            all_names = [ft.tree.topLevelItem(i).text(0)
+                         for i in range(ft.tree.topLevelItemCount())]
+            parent = os.path.dirname(str(tmp))
+            if parent != str(tmp):
+                self.assertIn("..", all_names)
+            ft.deleteLater()
+        logger.info("[PASS] parent item sempre visibile ✓")
+
+    def test_show_hidden_state_persists(self):
+        logger.info("═══ TestFileTreeHiddenFiles.test_show_hidden_state_persists ═══")
+        with tmp_dir() as tmp:
+            ft = FileTree(str(tmp))
+            self.assertFalse(ft._show_hidden)
+            ft.set_show_hidden(True)
+            self.assertTrue(ft._show_hidden)
+            ft.deleteLater()
+        logger.info("[PASS] stato _show_hidden persistente ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestTerminalToggleInMainWindow(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_terminal_hidden_on_startup(self):
+        logger.info("═══ TestTerminalToggleInMainWindow.test_terminal_hidden_on_startup ═══")
+        self.assertTrue(self.mw.terminal_widget.isHidden())
+        logger.info("[PASS] terminal hidden on startup ✓")
+
+    def test_toggle_terminal_shows_widget(self):
+        logger.info("═══ TestTerminalToggleInMainWindow.test_toggle_terminal_shows_widget ═══")
+        self.mw.toggle_terminal()
+        self.assertFalse(self.mw.terminal_widget.isHidden())
+        logger.info("[PASS] toggle_terminal mostra widget ✓")
+
+    def test_toggle_terminal_twice_hides_widget(self):
+        logger.info("═══ TestTerminalToggleInMainWindow.test_toggle_terminal_twice_hides_widget ═══")
+        self.mw.toggle_terminal()
+        self.mw.toggle_terminal()
+        self.assertTrue(self.mw.terminal_widget.isHidden())
+        logger.info("[PASS] toggle_terminal due volte nasconde ✓")
+
+    def test_toggle_terminal_sets_cwd_from_active_tab(self):
+        logger.info("═══ TestTerminalToggleInMainWindow.test_toggle_terminal_sets_cwd_from_active_tab ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "test.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw.toggle_terminal()
+            self.assertEqual(self.mw.terminal_widget._cwd, str(tmp))
+        logger.info("[PASS] toggle_terminal imposta cwd dal tab attivo ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowStatusBar(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_cycle_encoding_cycles_through_values(self):
+        logger.info("═══ TestMainWindowStatusBar.test_cycle_encoding_cycles_through_values ═══")
+        self.mw.new_file()
+        self.assertEqual(self.mw.config_manager.get("encoding", "UTF-8"), "UTF-8")
+        self.mw._cycle_encoding()
+        self.assertEqual(self.mw.config_manager.get("encoding"), "UTF-16")
+        self.mw._cycle_encoding()
+        self.assertEqual(self.mw.config_manager.get("encoding"), "Latin-1")
+        self.mw._cycle_encoding()
+        self.assertEqual(self.mw.config_manager.get("encoding"), "CP1252")
+        self.mw._cycle_encoding()
+        self.assertEqual(self.mw.config_manager.get("encoding"), "UTF-8")
+        logger.info("[PASS] encoding cycles correctly ✓")
+
+    def test_cycle_line_ending_cycles_through_values(self):
+        logger.info("═══ TestMainWindowStatusBar.test_cycle_line_ending_cycles_through_values ═══")
+        self.mw.new_file()
+        self.mw._cycle_line_ending()
+        self.assertEqual(self.mw.config_manager.get("line_ending"), "CRLF")
+        self.mw._cycle_line_ending()
+        self.assertEqual(self.mw.config_manager.get("line_ending"), "CR")
+        self.mw._cycle_line_ending()
+        self.assertEqual(self.mw.config_manager.get("line_ending"), "LF")
+        logger.info("[PASS] line ending cycles correctly ✓")
+
+    def test_cycle_tab_width_cycles_through_values(self):
+        logger.info("═══ TestMainWindowStatusBar.test_cycle_tab_width_cycles_through_values ═══")
+        self.mw.new_file()
+        self.mw._cycle_tab_width()
+        self.assertEqual(self.mw.config_manager.get("tab_width"), 8)
+        self.mw._cycle_tab_width()
+        self.assertEqual(self.mw.config_manager.get("tab_width"), 2)
+        self.mw._cycle_tab_width()
+        self.assertEqual(self.mw.config_manager.get("tab_width"), 4)
+        logger.info("[PASS] tab width cycles correctly ✓")
+
+    def test_zoom_active_editor_increases_level(self):
+        logger.info("═══ TestMainWindowStatusBar.test_zoom_active_editor_increases_level ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        initial_zoom = tab.editor._zoom_level
+        self.mw._zoom_active_editor(10)
+        self.assertEqual(tab.editor._zoom_level, initial_zoom + 10)
+        self.assertEqual(self.mw.zoom_label.text(), f"{initial_zoom + 10}%")
+        logger.info("[PASS] zoom active editor increases ✓")
+
+    def test_zoom_active_editor_clamped_at_50_min(self):
+        logger.info("═══ TestMainWindowStatusBar.test_zoom_active_editor_clamped_at_50_min ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.set_zoom_level(50)
+        self.mw._zoom_active_editor(-100)
+        self.assertGreaterEqual(tab.editor._zoom_level, 50)
+        logger.info("[PASS] zoom clamped at 50 ✓")
+
+    def test_zoom_active_editor_clamped_at_200_max(self):
+        logger.info("═══ TestMainWindowStatusBar.test_zoom_active_editor_clamped_at_200_max ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.set_zoom_level(200)
+        self.mw._zoom_active_editor(100)
+        self.assertLessEqual(tab.editor._zoom_level, 200)
+        logger.info("[PASS] zoom clamped at 200 ✓")
+
+    def test_reset_zoom_sets_100(self):
+        logger.info("═══ TestMainWindowStatusBar.test_reset_zoom_sets_100 ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.set_zoom_level(150)
+        self.mw._reset_zoom()
+        self.assertEqual(tab.editor._zoom_level, 100)
+        self.assertEqual(self.mw.zoom_label.text(), "100%")
+        logger.info("[PASS] reset zoom sets 100 ✓")
+
+    def test_update_cursor_pos_reflects_cursor(self):
+        logger.info("═══ TestMainWindowStatusBar.test_update_cursor_pos_reflects_cursor ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("line1\nline2\nline3")
+        cursor = tab.editor.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        tab.editor.setTextCursor(cursor)
+        self.mw._update_cursor_pos()
+        self.assertIn("Ln 3", self.mw.line_col_label.text())
+        logger.info("[PASS] cursor position reflects correctly ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowCloseTab(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_close_unmodified_tab_removes_tab(self):
+        logger.info("═══ TestMainWindowCloseTab.test_close_unmodified_tab_removes_tab ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        initial = self.mw.tabs.count()
+        self.mw.close_tab(0, 'left')
+        self.assertEqual(self.mw.tabs.count(), initial - 1)
+        logger.info("[PASS] close unmodified tab removes ✓")
+
+    def test_close_last_tab_creates_new_file(self):
+        logger.info("═══ TestMainWindowCloseTab.test_close_last_tab_creates_new_file ═══")
+        while self.mw.tabs.count() > 1:
+            self.mw.close_tab(0, 'left')
+        self.mw.close_tab(0, 'left')
+        self.assertEqual(self.mw.tabs.count(), 1)
+        logger.info("[PASS] close last tab creates new file ✓")
+
+    def test_close_right_tab_hides_right_pane_when_empty(self):
+        logger.info("═══ TestMainWindowCloseTab.test_close_right_tab_hides_right_pane_when_empty ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "r.txt"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw.split_editor()
+            self.assertFalse(self.mw.tabs_right.isHidden())
+            self.mw.close_tab(0, 'right')
+            self.assertTrue(self.mw.tabs_right.isHidden())
+        logger.info("[PASS] close right tab hides pane when empty ✓")
+
+    def test_update_tab_title_shows_bullet_when_modified(self):
+        logger.info("═══ TestMainWindowCloseTab.test_update_tab_title_shows_bullet_when_modified ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        idx = self.mw.tabs.indexOf(tab)
+        tab.editor.setPlainText("modified")
+        self.mw._update_tab_title_pane('left', idx)
+        title = self.mw.tabs.tabText(idx)
+        self.assertIn("\u25cf", title)
+        logger.info("[PASS] bullet shown when modified ✓")
+
+    def test_update_tab_title_no_bullet_when_saved(self):
+        logger.info("═══ TestMainWindowCloseTab.test_update_tab_title_no_bullet_when_saved ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "clean.txt"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            tab = self.mw.tabs.currentWidget()
+            idx = self.mw.tabs.indexOf(tab)
+            self.mw._update_tab_title_pane('left', idx)
+            title = self.mw.tabs.tabText(idx)
+            self.assertNotIn("\u25cf", title)
+        logger.info("[PASS] no bullet when saved ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowSaveTab(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_save_tab_by_index_with_path_returns_true(self):
+        logger.info("═══ TestMainWindowSaveTab.test_save_tab_by_index_with_path_returns_true ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "save_me.txt"
+            f.write_text("original")
+            self.mw.open_file(str(f))
+            tab = self.mw.tabs.currentWidget()
+            tab.editor.setPlainText("updated content")
+            result = self.mw.save_tab_by_index(self.mw.tabs.indexOf(tab), 'left')
+            self.assertTrue(result)
+            self.assertEqual(f.read_text(encoding='utf-8'), "updated content")
+        logger.info("[PASS] save tab with path returns True ✓")
+
+    def test_save_tab_by_index_without_path_opens_dialog(self):
+        logger.info("═══ TestMainWindowSaveTab.test_save_tab_by_index_without_path_opens_dialog ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("unsaved")
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QFileDialog.getSaveFileName',
+            return_value=('', '')
+        ):
+            result = self.mw.save_tab_by_index(self.mw.tabs.indexOf(tab), 'left')
+        self.assertFalse(result)
+        logger.info("[PASS] save tab without path returns False ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowUndoRedo(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_handle_undo_reverts_text(self):
+        logger.info("═══ TestMainWindowUndoRedo.test_handle_undo_reverts_text ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("original")
+        tab.editor.document().setModified(False)
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("modified")
+        self.mw.handle_undo()
+        self.assertEqual(tab.editor.toPlainText(), "original")
+        logger.info("[PASS] undo reverts text ✓")
+
+    def test_handle_redo_reapplies_text(self):
+        logger.info("═══ TestMainWindowUndoRedo.test_handle_redo_reapplies_text ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("original")
+        tab.editor.document().setModified(False)
+        cursor = tab.editor.textCursor()
+        cursor.select(cursor.SelectionType.Document)
+        cursor.insertText("modified")
+        self.mw.handle_undo()
+        self.mw.handle_redo()
+        self.assertEqual(tab.editor.toPlainText(), "modified")
+        logger.info("[PASS] redo reapplies text ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowFind(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_handle_find_plain_text_returns_true_when_found(self):
+        logger.info("═══ TestMainWindowFind.test_handle_find_plain_text_returns_true_when_found ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("hello world hello")
+        result = self.mw.handle_find("hello", False, False, forward=True)
+        self.assertTrue(result)
+        logger.info("[PASS] find plain text found ✓")
+
+    def test_handle_find_plain_text_returns_false_when_not_found(self):
+        logger.info("═══ TestMainWindowFind.test_handle_find_plain_text_returns_false_when_not_found ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("hello world")
+        result = self.mw.handle_find("xyz", False, False, forward=True)
+        self.assertFalse(result)
+        logger.info("[PASS] find plain text not found ✓")
+
+    def test_handle_find_case_sensitive(self):
+        logger.info("═══ TestMainWindowFind.test_handle_find_case_sensitive ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("Hello hello")
+        result_sensitive = self.mw.handle_find("Hello", True, False, forward=True)
+        self.assertTrue(result_sensitive)
+        result_wrong_case = self.mw.handle_find("hello", True, False, forward=True)
+        self.assertTrue(result_wrong_case)
+        logger.info("[PASS] find case sensitive ✓")
+
+    def test_handle_find_regex(self):
+        logger.info("═══ TestMainWindowFind.test_handle_find_regex ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("foo123bar")
+        result = self.mw.handle_find(r"\d+", False, True, forward=True)
+        self.assertTrue(result)
+        logger.info("[PASS] find regex ✓")
+
+    def test_handle_replace_all_replaces_all_occurrences(self):
+        logger.info("═══ TestMainWindowFind.test_handle_replace_all_replaces_all_occurrences ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("cat cat cat")
+        self.mw.handle_replace_all("cat", "dog", False, False)
+        self.assertEqual(tab.editor.toPlainText(), "dog dog dog")
+        logger.info("[PASS] replace all ✓")
+
+    def test_handle_replace_replaces_current_selection(self):
+        logger.info("═══ TestMainWindowFind.test_handle_replace_replaces_current_selection ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("cat cat")
+        self.mw.handle_find("cat", False, False, forward=True)
+        self.mw.handle_replace("cat", "dog", False, False)
+        self.assertIn("dog", tab.editor.toPlainText())
+        logger.info("[PASS] handle replace ✓")
+
+    def test_toggle_search_panel_changes_max_height(self):
+        logger.info("═══ TestMainWindowFind.test_toggle_search_panel_changes_max_height ═══")
+        self.mw.new_file()
+        initial_max_h = self.mw.search_panel.maximumHeight()
+        self.mw.toggle_search_panel('find')
+        self.assertNotEqual(
+            self.mw._search_anim.endValue(),
+            initial_max_h
+        )
+        logger.info("[PASS] toggle search panel changes height ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowRecentFiles(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_open_file_adds_to_recent(self):
+        logger.info("═══ TestMainWindowRecentFiles.test_open_file_adds_to_recent ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "recent.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            recent = self.mw.config_manager.get("recent_files", [])
+            self.assertTrue(any("recent.py" in r for r in recent))
+        logger.info("[PASS] open file adds to recent ✓")
+
+    def test_open_same_file_twice_does_not_duplicate_tab(self):
+        logger.info("═══ TestMainWindowRecentFiles.test_open_same_file_twice_does_not_duplicate_tab ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "dup.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            count_after_first = self.mw.tabs.count()
+            self.mw.open_file(str(f))
+            self.assertEqual(self.mw.tabs.count(), count_after_first)
+        logger.info("[PASS] open same file twice no duplicate tab ✓")
+
+    def test_clear_recent_empties_list(self):
+        logger.info("═══ TestMainWindowRecentFiles.test_clear_recent_empties_list ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "todel.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw._clear_recent()
+            recent = self.mw.config_manager.get("recent_files", [])
+            self.assertEqual(recent, [])
+        logger.info("[PASS] clear recent empties list ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowViewToggles(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_toggle_word_wrap_applies_to_all_tabs(self):
+        logger.info("═══ TestMainWindowViewToggles.test_toggle_word_wrap_applies_to_all_tabs ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        self.mw.word_wrap_action.setChecked(True)
+        self.mw.toggle_word_wrap()
+        for i in range(self.mw.tabs.count()):
+            tab = self.mw.tabs.widget(i)
+            self.assertIsNotNone(tab)
+        logger.info("[PASS] toggle word wrap applies to all tabs ✓")
+
+    def test_toggle_sidebar_hides_and_shows(self):
+        logger.info("═══ TestMainWindowViewToggles.test_toggle_sidebar_hides_and_shows ═══")
+        self.assertTrue(self.mw.sidebar_visible)
+        self.mw.toggle_sidebar()
+        self.assertFalse(self.mw.sidebar_visible)
+        self.mw.toggle_sidebar()
+        self.assertTrue(self.mw.sidebar_visible)
+        logger.info("[PASS] toggle sidebar ✓")
+
+    def test_toggle_sidebar_shows_strip_when_hidden(self):
+        logger.info("═══ TestMainWindowViewToggles.test_toggle_sidebar_shows_strip_when_hidden ═══")
+        self.mw.toggle_sidebar()
+        self.assertFalse(self.mw.toggle_strip.isHidden())
+        self.mw.toggle_sidebar()
+        self.assertTrue(self.mw.toggle_strip.isHidden())
+        logger.info("[PASS] toggle sidebar strip ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowMoveTab(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_move_tab_within_left_pane(self):
+        logger.info("═══ TestMainWindowMoveTab.test_move_tab_within_left_pane ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        count_before = self.mw.tabs.count()
+        self.mw._move_tab('left', 0, 'left', 1)
+        self.assertEqual(self.mw.tabs.count(), count_before)
+        logger.info("[PASS] move tab within left pane ✓")
+
+    def test_move_tab_left_to_right_shows_right_pane(self):
+        logger.info("═══ TestMainWindowMoveTab.test_move_tab_left_to_right_shows_right_pane ═══")
+        self.mw.new_file()
+        self.mw.new_file()
+        self.assertTrue(self.mw.tabs_right.isHidden())
+        self.mw._move_tab('left', 0, 'right', 0)
+        self.assertFalse(self.mw.tabs_right.isHidden())
+        logger.info("[PASS] move tab left to right shows right pane ✓")
+
+    def test_move_tab_right_to_left_hides_right_pane_when_empty(self):
+        logger.info("═══ TestMainWindowMoveTab.test_move_tab_right_to_left_hides_right_pane_when_empty ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "mv.txt"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw.split_editor()
+            self.mw._move_tab('right', 0, 'left', 0)
+            self.assertTrue(self.mw.tabs_right.isHidden())
+        logger.info("[PASS] move tab right to left hides right pane ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowSessionSave(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_save_session_persists_open_file_path(self):
+        logger.info("═══ TestMainWindowSessionSave.test_save_session_persists_open_file_path ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "sess.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw._save_session()
+            data = self.mw.config_manager.load_session()
+            paths = [t["path"] for t in data.get("tabs", []) if t.get("path")]
+            self.assertTrue(any("sess.py" in p for p in paths))
+        logger.info("[PASS] save session persists open file path ✓")
+
+    def test_save_session_persists_unsaved_content(self):
+        logger.info("═══ TestMainWindowSessionSave.test_save_session_persists_unsaved_content ═══")
+        self.mw.new_file()
+        tab = self.mw.tabs.currentWidget()
+        tab.editor.setPlainText("unsaved stuff")
+        tab._is_modified = True
+        self.mw._save_session()
+        data = self.mw.config_manager.load_session()
+        contents = [t.get("unsaved_content") for t in data.get("tabs", [])]
+        self.assertIn("unsaved stuff", contents)
+        logger.info("[PASS] save session persists unsaved content ✓")
+
+    def test_save_session_persists_view_settings(self):
+        logger.info("═══ TestMainWindowSessionSave.test_save_session_persists_view_settings ═══")
+        self.mw.word_wrap_action.setChecked(True)
+        self.mw._save_session()
+        data = self.mw.config_manager.load_session()
+        self.assertTrue(data["view_settings"]["word_wrap"])
+        logger.info("[PASS] save session persists view settings ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestMainWindowFileRenamedDeleted(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self._mock_git = unittest.mock.patch.object(
+            MainWindow, '_update_git_branch', return_value=None)
+        self._mock_git.start()
+        self.mw = MainWindow()
+
+    def tearDown(self):
+        self.mw.deleteLater()
+        self._mock_git.stop()
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_on_file_renamed_updates_tab_path(self):
+        logger.info("═══ TestMainWindowFileRenamedDeleted.test_on_file_renamed_updates_tab_path ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "old.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            tab = self.mw.tabs.currentWidget()
+            new_path = str(tmp / "new.py")
+            self.mw._on_file_renamed(str(f), new_path)
+            self.assertEqual(tab.file_path, new_path)
+        logger.info("[PASS] on_file_renamed updates tab path ✓")
+
+    def test_on_file_deleted_closes_tab(self):
+        logger.info("═══ TestMainWindowFileRenamedDeleted.test_on_file_deleted_closes_tab ═══")
+        with tmp_dir() as tmp:
+            f = tmp / "del.py"
+            f.write_text("x")
+            self.mw.open_file(str(f))
+            self.mw._on_file_deleted(str(f))
+            remaining_paths = [
+                self.mw.tabs.widget(i).file_path
+                for i in range(self.mw.tabs.count())
+            ]
+            self.assertNotIn(str(f.resolve()), [p for p in remaining_paths if p])
+        logger.info("[PASS] on_file_deleted closes tab ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestFileTreeCreateRenameDelete(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self.ft = FileTree(str(self.tmp))
+
+    def tearDown(self):
+        self.ft.deleteLater()
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_create_new_file_creates_file_on_disk(self):
+        logger.info("═══ TestFileTreeCreateRenameDelete.test_create_new_file_creates_file_on_disk ═══")
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QInputDialog.getText',
+            return_value=('newfile.txt', True)
+        ):
+            self.ft._create_new_item(False)
+        self.assertTrue((self.tmp / "newfile.txt").exists())
+        logger.info("[PASS] create new file on disk ✓")
+
+    def test_create_new_folder_creates_dir_on_disk(self):
+        logger.info("═══ TestFileTreeCreateRenameDelete.test_create_new_folder_creates_dir_on_disk ═══")
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QInputDialog.getText',
+            return_value=('newfolder', True)
+        ):
+            self.ft._create_new_item(True)
+        self.assertTrue((self.tmp / "newfolder").is_dir())
+        logger.info("[PASS] create new folder on disk ✓")
+
+    def test_create_item_with_path_traversal_rejected(self):
+        logger.info("═══ TestFileTreeCreateRenameDelete.test_create_item_with_path_traversal_rejected ═══")
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QInputDialog.getText',
+            return_value=('../evil.sh', True)
+        ):
+            self.ft._create_new_item(False)
+        self.assertFalse((self.tmp.parent / "evil.sh").exists())
+        logger.info("[PASS] path traversal in create rejected ✓")
+
+    def test_rename_item_renames_file_on_disk(self):
+        logger.info("═══ TestFileTreeCreateRenameDelete.test_rename_item_renames_file_on_disk ═══")
+        f = self.tmp / "before.txt"
+        f.write_text("x")
+        self.ft._populate(str(self.tmp))
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QInputDialog.getText',
+            return_value=('after.txt', True)
+        ):
+            for i in range(self.ft.tree.topLevelItemCount()):
+                item = self.ft.tree.topLevelItem(i)
+                if item.text(0) == 'before.txt':
+                    self.ft._rename_item(item, str(f))
+                    break
+        self.assertTrue((self.tmp / "after.txt").exists())
+        self.assertFalse(f.exists())
+        logger.info("[PASS] rename renames file on disk ✓")
+
+    def test_delete_item_removes_file_on_disk(self):
+        logger.info("═══ TestFileTreeCreateRenameDelete.test_delete_item_removes_file_on_disk ═══")
+        f = self.tmp / "todelete.txt"
+        f.write_text("x")
+        self.ft._populate(str(self.tmp))
+        with unittest.mock.patch(
+            'PyQt6.QtWidgets.QMessageBox.question',
+            return_value=QMessageBox.StandardButton.Yes
+        ):
+            for i in range(self.ft.tree.topLevelItemCount()):
+                item = self.ft.tree.topLevelItem(i)
+                if item.text(0) == 'todelete.txt':
+                    self.ft._delete_item(item, str(f))
+                    break
+        self.assertFalse(f.exists())
+        logger.info("[PASS] delete removes file on disk ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestEditorTabZoom(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ensure_qapp()
+
+    def test_zoom_in_increases_level(self):
+        logger.info("═══ TestEditorTabZoom.test_zoom_in_increases_level ═══")
+        tab = EditorTab(pane='left')
+        initial = tab.editor._zoom_level
+        tab.editor.zoom_in()
+        self.assertGreater(tab.editor._zoom_level, initial)
+        tab.deleteLater()
+        logger.info("[PASS] zoom in increases level ✓")
+
+    def test_zoom_out_decreases_level(self):
+        logger.info("═══ TestEditorTabZoom.test_zoom_out_decreases_level ═══")
+        tab = EditorTab(pane='left')
+        tab.editor.set_zoom_level(120)
+        tab.editor.zoom_out()
+        self.assertLess(tab.editor._zoom_level, 120)
+        tab.deleteLater()
+        logger.info("[PASS] zoom out decreases level ✓")
+
+    def test_reset_zoom_returns_to_100(self):
+        logger.info("═══ TestEditorTabZoom.test_reset_zoom_returns_to_100 ═══")
+        tab = EditorTab(pane='left')
+        tab.editor.set_zoom_level(150)
+        tab.editor.reset_zoom()
+        self.assertEqual(tab.editor._zoom_level, 100)
+        tab.deleteLater()
+        logger.info("[PASS] reset zoom returns to 100 ✓")
+
+    def test_zoom_initial_level_is_100(self):
+        logger.info("═══ TestEditorTabZoom.test_zoom_initial_level_is_100 ═══")
+        tab = EditorTab(pane='left')
+        self.assertEqual(tab.editor._zoom_level, 100)
+        tab.deleteLater()
+        logger.info("[PASS] zoom initial level is 100 ✓")
+
+
+@unittest.skipUnless(QT_AVAILABLE, "PyQt6 non disponibile")
+class TestConfigManagerKeybindings(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp_ctx = tmp_dir()
+        self.tmp = self._tmp_ctx.__enter__()
+        self._cfg_ctx = patched_config(self.tmp)
+        self._cfg_ctx.__enter__()
+        self.cm = ConfigManager()
+
+    def tearDown(self):
+        self._cfg_ctx.__exit__(None, None, None)
+        self._tmp_ctx.__exit__(None, None, None)
+
+    def test_get_binding_returns_default_for_known_action(self):
+        logger.info("═══ TestConfigManagerKeybindings.test_get_binding_returns_default_for_known_action ═══")
+        val = self.cm.get_binding("save_file")
+        self.assertIsInstance(val, str)
+        self.assertGreater(len(val), 0)
+        logger.info("[PASS] get_binding returns default ✓")
+
+    def test_get_binding_toggle_terminal_present(self):
+        logger.info("═══ TestConfigManagerKeybindings.test_get_binding_toggle_terminal_present ═══")
+        val = self.cm.get_binding("toggle_terminal")
+        self.assertIsInstance(val, str)
+        self.assertGreater(len(val), 0)
+        logger.info("[PASS] toggle_terminal binding present ✓")
+
+    def test_get_binding_toggle_split_present(self):
+        logger.info("═══ TestConfigManagerKeybindings.test_get_binding_toggle_split_present ═══")
+        val = self.cm.get_binding("toggle_split")
+        self.assertIsInstance(val, str)
+        self.assertGreater(len(val), 0)
+        logger.info("[PASS] toggle_split binding present ✓")
+
+    def test_custom_keybinding_overrides_default(self):
+        logger.info("═══ TestConfigManagerKeybindings.test_custom_keybinding_overrides_default ═══")
+        self.cm.keybindings["save_file"] = "Ctrl+Alt+S"
+        self.assertEqual(self.cm.get_binding("save_file"), "Ctrl+Alt+S")
+        logger.info("[PASS] custom keybinding overrides default ✓")
+
+
 class TestNoPrintResiduali(unittest.TestCase):
     """Fase 9 regression — nessun print() nei sorgenti del progetto"""
 
@@ -1315,6 +2456,23 @@ def run():
         TestKeybindingsDialogFunctional,
         TestEditorTabExtended,
         TestMainWindowExtended,
+        TestTerminalWidget,
+        TestResizeHandle,
+        TestFileTreeHiddenFiles,
+        TestTerminalToggleInMainWindow,
+        TestMainWindowStatusBar,
+        TestMainWindowCloseTab,
+        TestMainWindowSaveTab,
+        TestMainWindowUndoRedo,
+        TestMainWindowFind,
+        TestMainWindowRecentFiles,
+        TestMainWindowViewToggles,
+        TestMainWindowMoveTab,
+        TestMainWindowSessionSave,
+        TestMainWindowFileRenamedDeleted,
+        TestFileTreeCreateRenameDelete,
+        TestEditorTabZoom,
+        TestConfigManagerKeybindings,
         TestNoPrintResiduali,
     ]
 

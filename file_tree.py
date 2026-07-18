@@ -25,6 +25,7 @@ class FileTree(QWidget):
 
         # File Tree
         self.current_root = os.path.realpath(initial_path or os.getcwd())
+        self._show_hidden = False
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(20)
@@ -62,6 +63,13 @@ class FileTree(QWidget):
             self.current_root = real_path
             self._populate(self.current_root)
 
+    def set_show_hidden(self, visible: bool):
+        self._show_hidden = visible
+        self._refresh()
+
+    def _refresh(self):
+        self._populate(self.current_root)
+
     def _populate(self, path):
         self.tree.clear()
         
@@ -94,6 +102,8 @@ class FileTree(QWidget):
         dirs = []
         files = []
         for entry in entries:
+            if not self._show_hidden and entry.startswith(".") and entry != "..":
+                continue
             full_path = os.path.join(path, entry)
             if os.path.isdir(full_path):
                 real = os.path.realpath(full_path)
@@ -209,6 +219,13 @@ class FileTree(QWidget):
                 
                 if os.path.isdir(path):
                     open_action.setText("Open Folder")
+        
+        menu.addSeparator()
+        show_hidden_action = QAction("Show Hidden Files", self)
+        show_hidden_action.setCheckable(True)
+        show_hidden_action.setChecked(self._show_hidden)
+        show_hidden_action.triggered.connect(lambda checked: self.set_show_hidden(checked))
+        menu.addAction(show_hidden_action)
         
         action = menu.exec(self.tree.mapToGlobal(position))
         
