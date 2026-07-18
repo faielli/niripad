@@ -496,6 +496,33 @@ QToolButton:pressed {{
     border-color: {t.ACCENT.name()};
     background-color: {t.BG_SURFACE.name()};
 }}
+
+#terminal_widget {{
+    background-color: {t.BG_DEEP.name()};
+    border-top: 1px solid {t.BORDER_SUBTLE.name()};
+}}
+#terminal_header {{
+    background-color: {t.BG_PANEL.name()};
+    border-bottom: 1px solid {t.BORDER_SUBTLE.name()};
+}}
+#terminal_cwd {{
+    color: {t.FG_MUTED.name()};
+    font-size: 11px;
+}}
+#terminal_prompt {{
+    color: {t.ACCENT.name()};
+    font-weight: bold;
+}}
+#terminal_input {{
+    background-color: {t.BG_DEEP.name()};
+    color: {t.FG_PRIMARY.name()};
+    border: none;
+    border-top: 1px solid {t.BORDER_SUBTLE.name()};
+    padding: 2px 4px;
+}}
+#terminal_input_bar {{
+    background-color: {t.BG_DEEP.name()};
+}}
 """
 
 

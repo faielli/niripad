@@ -4,6 +4,7 @@ import re
 import time
 import subprocess
 import hashlib
+from PyQt6 import sip
 from pathlib import Path
 import logging
 
@@ -47,6 +48,7 @@ from keybindings_dialog import KeybindingsDialog
 from icon_utils import Icons
 from qss_tokens import apply_shadow
 from theme_tokens import Tokens
+from terminal_widget import TerminalWidget
 
 
 class DraggableTabBar(QTabBar):
@@ -252,6 +254,16 @@ class MainWindow(QMainWindow):
         self.goto_panel.hide()
         self.editor_layout.addWidget(self.goto_panel)
 
+        # Terminal panel (hidden by default)
+        self.terminal_widget = TerminalWidget()
+        self.terminal_widget.hide()
+        self.editor_layout.addWidget(self.terminal_widget)
+
+        # Terminal toggle shortcut
+        terminal_shortcut = QShortcut(QKeySequence("Ctrl+\\"), self)
+        terminal_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        terminal_shortcut.activated.connect(self.toggle_terminal)
+
         # Editor Area (no toggle — just the editor container)
         self.editor_area = QWidget()
         editor_hlayout = QHBoxLayout(self.editor_area)
@@ -279,7 +291,8 @@ class MainWindow(QMainWindow):
             "undo": "Undo",
             "redo": "Redo",
             "command_palette": "Command Palette",
-            "goto_line": "Go to Line"
+            "goto_line": "Go to Line",
+            "toggle_terminal": "Toggle Terminal"
         }
         # Command Palette
         self.command_palette = CommandPalette(self.commands, self)
@@ -317,6 +330,16 @@ class MainWindow(QMainWindow):
             self.toggle_strip.hide()
             self.sidebar_toggle.setIcon(ico.chevron_left())
         self.sidebar_visible = not self.sidebar_visible
+
+    def toggle_terminal(self):
+        if self.terminal_widget.isVisible():
+            self.terminal_widget.hide()
+        else:
+            tab = self._active_tab_widget().currentWidget()
+            if tab and tab.file_path:
+                self.terminal_widget.set_cwd(os.path.dirname(tab.file_path))
+            self.terminal_widget.show()
+            self.terminal_widget.focus_input()
 
     def _on_splitter_moved(self, pos, index):
         if self.sidebar_visible:
@@ -425,7 +448,7 @@ class MainWindow(QMainWindow):
         self.line_col_label.setText(f"Ln {cursor.blockNumber() + 1}, Col {cursor.columnNumber() + 1}")
 
     def _on_tab_changed(self, index):
-        if self._last_active_tab and self.search_panel.maximumHeight() == 0:
+        if self._last_active_tab and not sip.isdeleted(self._last_active_tab) and self.search_panel.maximumHeight() == 0:
             self._last_active_tab.clear_highlights()
         tw = self.sender()
         if tw is not None and index >= 0:
@@ -820,7 +843,7 @@ class MainWindow(QMainWindow):
 
         self.split_action = QAction("Split Editor", self)
         self.split_action.setIcon(ico.columns())
-        self.split_action.setShortcut(QKeySequence("Ctrl+\\"))
+        self.split_action.setShortcut(QKeySequence("Ctrl+Shift+\\"))
         self.split_action.triggered.connect(self.split_editor)
         view_menu.addAction(self.split_action)
 
@@ -1171,6 +1194,8 @@ class MainWindow(QMainWindow):
         tab = tw.widget(index)
         if not tab:
             return
+        if self._last_active_tab is tab:
+            self._last_active_tab = None
         if tab.is_modified():
             ret = QMessageBox.question(
                 self, "Save Changes?", 
@@ -1562,6 +1587,8 @@ class MainWindow(QMainWindow):
             idx = int(command_id.split("_")[-1])
             if idx < len(path):
                 self.open_file(path[idx])
+        elif command_id == "toggle_terminal":
+            self.toggle_terminal()
         elif command_id == "goto_line":
             self.show_goto_line()
 
