@@ -187,6 +187,7 @@ class CustomEditor(QPlainTextEdit):
 
         self.textChanged.connect(self._fold_timer.start)
         self.cursorPositionChanged.connect(self._on_cursor_moved)
+        self.updateRequest.connect(self._on_update_request)
         self._search_highlights = []
         self._bracket_highlights = []
         self._zoom_level = 100
@@ -684,8 +685,7 @@ class CustomEditor(QPlainTextEdit):
         super().resizeEvent(event)
         self.update_sidebar_width()
 
-    def updateRequest(self, rect, dy):
-        super().updateRequest(rect, dy)
+    def _on_update_request(self, rect, dy):
         if dy:
             self.lineNumberArea.update()
             self.foldingArea.update()
